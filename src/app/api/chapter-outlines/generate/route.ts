@@ -59,12 +59,16 @@ export async function POST(request: Request) {
       plotStructure: `架构核心种子：${project.coreSeed}`,
     })
 
+    // Use higher maxTokens for outline generation (needs to output multiple chapters)
+    // Scale maxTokens based on chapter count: ~500 tokens per chapter outline
+    const outlineMaxTokens = Math.min(Math.max(effectiveChapterCount * 500, 4096), 16384)
+
     const resultText = await aiChat(
       [
         { role: 'system', content: prompts.system },
         { role: 'user', content: prompts.user },
       ],
-      { maxTokens: 8192 }
+      { maxTokens: outlineMaxTokens }
     )
 
     // Parse the AI response

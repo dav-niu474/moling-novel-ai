@@ -13,7 +13,7 @@ export async function GET() {
           provider: 'nvidia',
           apiKey: '',
           baseUrl: 'https://integrate.api.nvidia.com/v1',
-          model: 'deepseek-ai/deepseek-r1',
+          model: 'deepseek-ai/deepseek-v4-flash',
           temperature: 0.7,
           maxTokens: 8192,
         },

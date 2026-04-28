@@ -113,7 +113,7 @@ model AISettings {
   provider  String   @default("nvidia") // nvidia, openai, deepseek, qwen, moonshot, glm, zhipu, doubao, custom, builtin
   apiKey    String   @default("")
   baseUrl   String   @default("https://integrate.api.nvidia.com/v1")
-  model     String   @default("deepseek-ai/deepseek-r1")
+  model     String   @default("deepseek-ai/deepseek-v4-flash")
   temperature Float   @default(0.7)
   maxTokens Int      @default(8192)
   createdAt DateTime @default(now())

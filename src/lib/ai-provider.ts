@@ -37,16 +37,24 @@ export const AI_PROVIDERS: ProviderConfig[] = [
     name: 'NVIDIA NIM',
     baseUrl: 'https://integrate.api.nvidia.com/v1',
     models: [
-      { id: 'deepseek-ai/deepseek-r1', name: 'DeepSeek R1', maxTokens: 16384 },
-      { id: 'deepseek-ai/deepseek-r1-distill-llama-70b', name: 'DeepSeek R1 Distill 70B', maxTokens: 16384 },
+      { id: 'deepseek-ai/deepseek-v4-flash', name: 'DeepSeek V4 Flash (推荐)', maxTokens: 16384 },
+      { id: 'deepseek-ai/deepseek-v4-pro', name: 'DeepSeek V4 Pro', maxTokens: 16384 },
+      { id: 'deepseek-ai/deepseek-v3.2', name: 'DeepSeek V3.2', maxTokens: 8192 },
+      { id: 'qwen/qwen3.5-397b-a17b', name: 'Qwen 3.5 397B', maxTokens: 16384 },
+      { id: 'qwen/qwen3.5-122b-a10b', name: 'Qwen 3.5 122B', maxTokens: 16384 },
+      { id: 'qwen/qwen3-coder-480b-a35b-instruct', name: 'Qwen 3 Coder 480B', maxTokens: 8192 },
       { id: 'meta/llama-3.3-70b-instruct', name: 'Llama 3.3 70B Instruct', maxTokens: 8192 },
-      { id: 'meta/llama-3.1-405b-instruct', name: 'Llama 3.1 405B Instruct', maxTokens: 8192 },
-      { id: 'mistralai/mixtral-8x22b-instruct-v0.1', name: 'Mixtral 8x22B Instruct', maxTokens: 8192 },
-      { id: 'qwen/qwen2.5-72b-instruct', name: 'Qwen 2.5 72B Instruct', maxTokens: 8192 },
+      { id: 'meta/llama-4-maverick-17b-128e-instruct', name: 'Llama 4 Maverick 17B', maxTokens: 8192 },
+      { id: 'nvidia/llama-3.1-nemotron-ultra-253b-v1', name: 'Nemotron Ultra 253B', maxTokens: 16384 },
       { id: 'nvidia/llama-3.1-nemotron-70b-instruct', name: 'Nemotron 70B Instruct', maxTokens: 8192 },
-      { id: 'google/gemma-2-27b-it', name: 'Gemma 2 27B IT', maxTokens: 8192 },
+      { id: 'google/gemma-3-27b-it', name: 'Gemma 3 27B IT', maxTokens: 8192 },
+      { id: 'google/gemma-4-31b-it', name: 'Gemma 4 31B IT', maxTokens: 8192 },
+      { id: 'minimaxai/minimax-m2.7', name: 'MiniMax M2.7', maxTokens: 16384 },
+      { id: 'mistralai/mistral-large-3-675b-instruct-2512', name: 'Mistral Large 3 675B', maxTokens: 16384 },
+      { id: 'mistralai/mistral-small-4-119b-2603', name: 'Mistral Small 4 119B', maxTokens: 8192 },
+      { id: 'mistralai/mixtral-8x22b-instruct-v0.1', name: 'Mixtral 8x22B Instruct', maxTokens: 8192 },
     ],
-    defaultModel: 'deepseek-ai/deepseek-r1',
+    defaultModel: 'deepseek-ai/deepseek-v4-flash',
     apiKeyPrefix: 'nvapi-',
     description: 'NVIDIA NIM 云端推理服务，免费提供多种开源大模型',
   },
@@ -199,7 +207,7 @@ export async function getAISettings(): Promise<AISettingsConfig> {
         provider: settings.provider || 'nvidia',
         apiKey: settings.apiKey || '',
         baseUrl: settings.baseUrl || 'https://integrate.api.nvidia.com/v1',
-        model: settings.model || 'deepseek-ai/deepseek-r1',
+        model: settings.model || 'deepseek-ai/deepseek-v4-flash',
         temperature: settings.temperature ?? 0.7,
         maxTokens: settings.maxTokens || 8192,
       };
@@ -213,7 +221,7 @@ export async function getAISettings(): Promise<AISettingsConfig> {
     provider: 'nvidia',
     apiKey: '',
     baseUrl: 'https://integrate.api.nvidia.com/v1',
-    model: 'deepseek-ai/deepseek-r1',
+    model: 'deepseek-ai/deepseek-v4-flash',
     temperature: 0.7,
     maxTokens: 8192,
   };
@@ -268,7 +276,10 @@ async function openAIChat(
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+  const content = data.choices?.[0]?.message?.content || '';
+  
+  // Some models return reasoning_content separately - we only use the main content
+  return content;
 }
 
 /**
@@ -468,10 +479,21 @@ export function createStreamingResponse(stream: AsyncIterable<any>): ReadableStr
 }
 
 /**
- * Parse JSON from AI response, handling potential markdown code blocks
+ * Parse JSON from AI response, handling various edge cases:
+ * - Markdown code blocks (```json...```)
+ * - Thinking/reasoning tags (<think...</think >)
+ * - Extra text before/after JSON
+ * - Partially truncated JSON (best-effort recovery)
  */
 export function parseAIJSON<T>(text: string): T {
   let cleaned = text.trim();
+
+  // Step 1: Remove thinking/reasoning tags (DeepSeek R1, Qwen thinking mode, etc.)
+  cleaned = cleaned.replace(/<think[\s\S]*?<\/think>/gi, '');
+  cleaned = cleaned.replace(/<thinking[\s\S]*?<\/thinking>/gi, '');
+  cleaned = cleaned.trim();
+
+  // Step 2: Remove markdown code blocks
   if (cleaned.startsWith('```json')) {
     cleaned = cleaned.slice(7);
   } else if (cleaned.startsWith('```')) {
@@ -482,7 +504,115 @@ export function parseAIJSON<T>(text: string): T {
   }
   cleaned = cleaned.trim();
 
-  return JSON.parse(cleaned) as T;
+  // Step 3: Try direct parse first
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch {
+    // Continue to more aggressive extraction
+  }
+
+  // Step 4: Extract JSON from text (find first { or [ and match to end)
+  const jsonStartObj = cleaned.indexOf('{');
+  const jsonStartArr = cleaned.indexOf('[');
+  
+  let jsonStart: number;
+  let expectedEnd: string;
+  
+  if (jsonStartObj === -1 && jsonStartArr === -1) {
+    throw new Error('No JSON object or array found in AI response');
+  } else if (jsonStartObj === -1) {
+    jsonStart = jsonStartArr;
+    expectedEnd = ']';
+  } else if (jsonStartArr === -1) {
+    jsonStart = jsonStartObj;
+    expectedEnd = '}';
+  } else {
+    jsonStart = Math.min(jsonStartObj, jsonStartArr);
+    expectedEnd = jsonStartObj < jsonStartArr ? '}' : ']';
+  }
+
+  // Find the matching closing bracket
+  let depth = 0;
+  let jsonEnd = -1;
+  let inString = false;
+  let escapeNext = false;
+  
+  for (let i = jsonStart; i < cleaned.length; i++) {
+    const char = cleaned[i];
+    
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+    
+    if (char === '\\' && inString) {
+      escapeNext = true;
+      continue;
+    }
+    
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    
+    if (inString) continue;
+    
+    if (char === '{' || char === '[') depth++;
+    if (char === '}' || char === ']') {
+      depth--;
+      if (depth === 0) {
+        jsonEnd = i + 1;
+        break;
+      }
+    }
+  }
+
+  if (jsonEnd === -1) {
+    // If we can't find the end, the JSON might be truncated
+    // Try to close it ourselves
+    const partial = cleaned.slice(jsonStart);
+    
+    // Count unclosed brackets
+    let openBrackets = 0;
+    let openBraces = 0;
+    let inStr = false;
+    let escNext = false;
+    
+    for (const char of partial) {
+      if (escNext) { escNext = false; continue; }
+      if (char === '\\' && inStr) { escNext = true; continue; }
+      if (char === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (char === '[') openBrackets++;
+      if (char === ']') openBrackets--;
+      if (char === '{') openBraces++;
+      if (char === '}') openBraces--;
+    }
+    
+    // Try to close the JSON
+    let repaired = partial;
+    
+    // If we're inside a string, close it
+    if (inStr) repaired += '"';
+    
+    // Close open structures
+    while (openBraces > 0) { repaired += '}'; openBraces--; }
+    while (openBrackets > 0) { repaired += ']'; openBrackets--; }
+    
+    try {
+      return JSON.parse(repaired) as T;
+    } catch {
+      throw new Error(`Failed to parse AI response as JSON (truncated response, repair attempt failed)`);
+    }
+  }
+
+  const extracted = cleaned.slice(jsonStart, jsonEnd);
+  
+  try {
+    return JSON.parse(extracted) as T;
+  } catch {
+    throw new Error('Failed to parse extracted JSON from AI response');
+  }
 }
 
 /**

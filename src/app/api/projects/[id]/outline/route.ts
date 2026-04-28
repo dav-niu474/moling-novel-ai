@@ -51,11 +51,14 @@ export async function POST(
       .map((ws) => `${ws.name}（${ws.category}）：${ws.description}`)
       .join('\n');
 
-    // Generate outlines using AI
+    // Cap chapter count and generate outlines using AI
+    const effectiveChapterCount = Math.min(project.chapterCount, 30);
+    const outlineMaxTokens = Math.min(Math.max(effectiveChapterCount * 500, 4096), 16384);
+
     const prompts = outlinePrompt({
       title: project.title,
       genre: project.genre,
-      chapterCount: project.chapterCount,
+      chapterCount: effectiveChapterCount,
       wordsPerChapter: project.wordsPerChapter,
       coreSeed: project.coreSeed,
       characters: charactersSummary,
@@ -66,7 +69,7 @@ export async function POST(
     const resultText = await aiChat([
       { role: 'system', content: prompts.system },
       { role: 'user', content: prompts.user },
-    ]);
+    ], { maxTokens: outlineMaxTokens });
 
     // Parse the AI response
     let outlines;
