@@ -3,6 +3,8 @@ import { db } from '@/lib/db';
 import { aiChat, parseAIJSON } from '@/lib/ai';
 import { architecturePrompt } from '@/lib/prompts';
 
+export const maxDuration = 60;
+
 // POST /api/projects/[id]/architecture - Generate novel architecture using AI
 export async function POST(
   request: NextRequest,

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { aiChat } from '@/lib/ai';
 import { refinePrompt } from '@/lib/prompts';
 
+export const maxDuration = 60;
+
 // POST /api/projects/[id]/refine - Refine text using AI
 export async function POST(
   request: NextRequest,

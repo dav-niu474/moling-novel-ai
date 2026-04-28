@@ -3,6 +3,8 @@ import { db } from '@/lib/db';
 import { aiChat, parseAIJSON } from '@/lib/ai';
 import { outlinePrompt } from '@/lib/prompts';
 
+export const maxDuration = 60;
+
 // POST /api/projects/[id]/outline - Generate chapter outlines using AI
 export async function POST(
   _request: NextRequest,

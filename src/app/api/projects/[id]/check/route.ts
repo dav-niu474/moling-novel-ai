@@ -3,6 +3,8 @@ import { db } from '@/lib/db';
 import { aiChat, parseAIJSON } from '@/lib/ai';
 import { consistencyCheckPrompt } from '@/lib/prompts';
 
+export const maxDuration = 60;
+
 interface ConsistencyIssue {
   type: 'character_logic' | 'plot_contradiction' | 'setting_violation' | 'style_issue';
   severity: 'high' | 'medium' | 'low';

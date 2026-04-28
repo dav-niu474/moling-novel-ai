@@ -3,6 +3,8 @@ import { aiChat, parseAIJSON } from '@/lib/ai'
 import { architecturePrompt } from '@/lib/prompts'
 import { NextResponse } from 'next/server'
 
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   let projectId: string | undefined
   let coreSeed: string | undefined

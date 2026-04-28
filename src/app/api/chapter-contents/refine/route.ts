@@ -2,6 +2,8 @@ import { aiChat } from '@/lib/ai'
 import { refinePrompt } from '@/lib/prompts'
 import { NextResponse } from 'next/server'
 
+export const maxDuration = 60;
+
 // Map frontend actions to refinePrompt actions
 // refinePrompt supports: 'polish' | 'expand' | 'deAI' | 'strengthen'
 // Frontend sends: 'polish' | 'expand' | 'de-ai' | 'conflict' | 'detail' | 'dialogue' | 'check'

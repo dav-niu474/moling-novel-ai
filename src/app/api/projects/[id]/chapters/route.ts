@@ -3,6 +3,8 @@ import { db } from '@/lib/db';
 import { aiChatStream, createStreamingResponse } from '@/lib/ai';
 import { chapterWritingPrompt } from '@/lib/prompts';
 
+export const maxDuration = 60;
+
 // POST /api/projects/[id]/chapters - Generate chapter content with streaming
 export async function POST(
   request: NextRequest,
