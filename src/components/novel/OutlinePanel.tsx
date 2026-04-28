@@ -55,9 +55,12 @@ export function OutlinePanel({ projectId, chapterCount }: OutlinePanelProps) {
     }
   }
 
+  const [generateProgress, setGenerateProgress] = useState('')
+
   const handleGenerate = async () => {
     try {
       setGenerating(true)
+      setGenerateProgress('AI正在分析架构与角色信息...')
       const res = await fetch('/api/chapter-outlines/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -68,28 +71,11 @@ export function OutlinePanel({ projectId, chapterCount }: OutlinePanelProps) {
         setOutlines(data)
         toast.success(`生成了 ${data.length} 章大纲`)
       } else {
-        // Demo fallback
-        const demoOutlines: ChapterOutline[] = Array.from({ length: chapterCount }, (_, i) => ({
-          id: `demo-${i}`,
-          chapterNumber: i + 1,
-          title: i === 0 ? '命运的开端' : i < 10 ? `第${i + 1}章：成长之路` : i < 25 ? `第${i + 1}章：风起云涌` : `第${i + 1}章：终局之战`,
-          summary: i === 0
-            ? '少年在山村中过着平静的生活，一次意外的事件打破了一切，他发现了自己体内沉睡的力量。'
-            : i < 10
-            ? `主角开始踏上修真之路，在磨练中不断成长，结识了重要的伙伴。`
-            : i < 25
-            ? `更大的阴谋浮出水面，主角必须在各方势力的角力中寻找真相。`
-            : `所有伏笔汇聚，最终的决战即将来临，主角面临最大的考验。`,
-          keyPoints: JSON.stringify(['情节推进', '角色成长', '伏笔铺垫']),
-          foreshadowing: JSON.stringify(['身世之谜的线索', '神秘力量的暗示']),
-          emotionBeat: i < 10 ? '上升' : i < 25 ? '波动' : '高潮',
-          conflicts: JSON.stringify(['内心矛盾', '外部压力']),
-        }))
-        setOutlines(demoOutlines)
-        toast.success(`生成了 ${chapterCount} 章大纲（演示模式）`)
+        const errorData = await res.json().catch(() => null)
+        toast.error(errorData?.error || '大纲生成失败，请稍后重试')
       }
     } catch {
-      toast.error('生成大纲失败')
+      toast.error('大纲生成失败，请检查网络连接后重试')
     } finally {
       setGenerating(false)
     }
@@ -134,7 +120,7 @@ export function OutlinePanel({ projectId, chapterCount }: OutlinePanelProps) {
               className="border-amber-200 dark:border-stone-600 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-stone-800"
             >
               {generating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-              重新生成
+              {generating ? '生成中...' : '重新生成'}
             </Button>
           )}
           <Button
@@ -143,7 +129,7 @@ export function OutlinePanel({ projectId, chapterCount }: OutlinePanelProps) {
             className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
           >
             {generating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-            生成大纲
+            {generating ? generateProgress || '生成中...' : '生成大纲'}
           </Button>
         </div>
       </div>

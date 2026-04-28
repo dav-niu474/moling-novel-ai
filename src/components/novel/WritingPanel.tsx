@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import {
   PenTool,
   Sparkles,
@@ -133,63 +133,11 @@ export function WritingPanel({ projectId, chapterCount }: WritingPanelProps) {
           toast.success('章节生成完成')
         }
       } else {
-        // Demo streaming simulation
-        const demoText = `第${selectedChapter}章
-
-晨光初照，灵气如薄雾般缭绕在青石山道上。
-
-少年林逸背负长剑，一步步攀上陡峭的山路。他的呼吸沉稳而有力，每一步都踏在灵气最浓郁的位置，仿佛与天地之间有着某种默契。
-
-"又来了。"山门前，守门弟子赵明远远望见林逸的身影，嘴角微微抽动。
-
-自从三个月前那场意外之后，这个曾经默默无闻的外门弟子，便每日卯时登山，风雨无阻。起初众人都以为他不过是一时兴起，没想到他竟坚持了整整九十天。
-
-林逸走到山门前，停下脚步，向着赵明微微点头致意。
-
-"今日的灵气比往日浓郁了三分。"他平静地说。
-
-赵明一愣，随即嗤笑道："你一个炼气三层的废物，也能感知灵气浓度？"
-
-林逸没有回答，只是目光平静地看了他一眼，然后转身走向修炼场。那目光中没有愤怒，没有委屈，只有一种令人心悸的淡然。
-
-赵明被这一眼看得莫名心虚，张了张嘴，终究没有再说什么。
-
-修炼场上，几名外门弟子正在比试。刀光剑影之间，灵气激荡，好不热闹。林逸在角落盘膝而坐，缓缓闭上了眼睛。
-
-他的意识沉入体内，感受着丹田中那颗奇异的金色光点。三个月前，正是这颗光点的出现，改变了他的命运。
-
-"它又在跳动了......"林逸喃喃自语。
-
-金色光点的每一次跳动，都带来一股温热的能量，沿着经脉流遍全身。他能感觉到自己的修为在缓慢而坚定地提升。
-
-忽然，一阵急促的钟声从主峰传来——
-
-"铛——铛——铛——"
-
-三声钟响，这是宗门召集所有弟子的信号。
-
-林逸睁开眼睛，嘴角微微上扬。他知道，今天会有不同寻常的事情发生。
-
-而他，已经准备好了。`
-
-        let i = 0
-        const streamInterval = setInterval(() => {
-          if (i >= demoText.length) {
-            clearInterval(streamInterval)
-            setTextContent(demoText)
-            setStreamingText('')
-            setGenerating(false)
-            updateChapterState(selectedChapter, demoText, 'generated')
-            toast.success('章节生成完成（演示模式）')
-            return
-          }
-          const chunkSize = Math.min(3 + Math.floor(Math.random() * 5), demoText.length - i)
-          i += chunkSize
-          setStreamingText(demoText.slice(0, i))
-        }, 30)
+        const errorData = await res.json().catch(() => null)
+        toast.error(errorData?.error || '章节生成失败，请稍后重试')
       }
     } catch {
-      toast.error('生成章节失败')
+      toast.error('章节生成失败，请检查网络连接后重试')
     } finally {
       setGenerating(false)
     }
@@ -211,35 +159,59 @@ export function WritingPanel({ projectId, chapterCount }: WritingPanelProps) {
 
       if (res.ok) {
         const data = await res.json()
-        setTextContent(data.content)
-        updateChapterState(selectedChapter, data.content, action === 'polish' ? 'polished' : undefined)
-        toast.success('处理完成')
-      } else {
-        // Demo - just add a note
-        const prefixes: Record<string, string> = {
-          polish: '\n\n[润色后：文字更加流畅自然，去除了冗余表达]',
-          expand: '\n\n[扩写后：增加了更多细节描写和内心独白]',
-          'de-ai': '\n\n[去AI味后：减少了常见的AI表达模式，增加了个人风格]',
-          conflict: '\n\n[强化冲突后：增加了角色之间的矛盾和张力]',
-          detail: '\n\n[增加细节后：丰富了场景描写和感官细节]',
+        if (data.content) {
+          setTextContent(data.content)
+          updateChapterState(selectedChapter, data.content, action === 'polish' ? 'polished' : undefined)
+          toast.success('处理完成')
+        } else {
+          toast.error('处理结果格式异常')
         }
-        setTextContent((prev) => prev + (prefixes[action] || '\n\n[处理完成]'))
-        toast.success(`处理完成（演示模式）`)
+      } else {
+        const errorData = await res.json().catch(() => null)
+        toast.error(errorData?.error || '文本处理失败，请稍后重试')
       }
     } catch {
-      toast.error('处理失败')
+      toast.error('文本处理失败，请检查网络连接后重试')
     } finally {
       setRefining(false)
     }
   }
 
-  const handleContextMenuAction = (action: string) => {
+  const handleContextMenuAction = async (action: string) => {
     const selection = window.getSelection()?.toString()
     if (!selection) {
       toast.error('请先选择文本')
       return
     }
-    handleToolbarAction(action)
+
+    try {
+      setRefining(true)
+      const res = await fetch('/api/chapter-contents/refine', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, chapterNumber: selectedChapter, action, content: selection }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        if (data.content) {
+          // Replace the selected text in the content with the refined version
+          const newContent = textContent.replace(selection, data.content)
+          setTextContent(newContent)
+          updateChapterState(selectedChapter!, newContent)
+          toast.success('处理完成')
+        } else {
+          toast.error('处理结果格式异常')
+        }
+      } else {
+        const errorData = await res.json().catch(() => null)
+        toast.error(errorData?.error || '文本处理失败，请稍后重试')
+      }
+    } catch {
+      toast.error('文本处理失败，请检查网络连接后重试')
+    } finally {
+      setRefining(false)
+    }
   }
 
   const handleSaveContent = async () => {
@@ -376,7 +348,7 @@ export function WritingPanel({ projectId, chapterCount }: WritingPanelProps) {
             className="h-7 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs"
           >
             {generating ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Sparkles className="w-3 h-3 mr-1" />}
-            生成
+            {generating ? 'AI生成中...' : '生成'}
           </Button>
           <div className="h-4 w-px bg-stone-200 dark:bg-stone-700" />
           <Button

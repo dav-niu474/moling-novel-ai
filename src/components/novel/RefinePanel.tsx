@@ -44,23 +44,18 @@ export function RefinePanel({ projectId }: RefinePanelProps) {
 
       if (res.ok) {
         const data = await res.json()
-        setOutputText(data.content)
-        toast.success('处理完成')
-      } else {
-        // Demo fallback
-        const demoOutputs: Record<string, string> = {
-          polish: `${inputText}\n\n[润色结果] 文字经过优化，去除了冗余表达，增强了行文的节奏感和韵律美。语言更加精炼流畅，用词更为精准。`,
-          expand: `${inputText}\n\n[扩写结果] 在原有基础上增加了环境描写的层次感，丰富了人物的内心独白，补充了细微的动作描写和感官体验，使场景更加立体饱满。`,
-          'de-ai': `${inputText}\n\n[去AI味结果] 移除了常见的AI表达模式如"仿佛""宛如"等套路化用词，增加了更有个性的表达方式和口语化叙述，使文字更具人情味。`,
-          conflict: `${inputText}\n\n[强化冲突结果] 加深了角色间的对立程度，增加了言语交锋和心理博弈，使矛盾更加尖锐，冲突更具戏剧张力。`,
-          detail: `${inputText}\n\n[增加细节结果] 补充了光影变化、温度触感、气味声音等多维度感官描写，增加了微表情和肢体语言的刻画，使场景更加生动。`,
-          dialogue: `${inputText}\n\n[完善对话结果] 优化了人物对话的个性化程度，增加了潜台词和言外之意，使每个角色的说话方式更具辨识度。`,
+        if (data.content) {
+          setOutputText(data.content)
+          toast.success('处理完成')
+        } else {
+          toast.error('处理结果格式异常')
         }
-        setOutputText(demoOutputs[actionKey] || inputText)
-        toast.success('处理完成（演示模式）')
+      } else {
+        const errorData = await res.json().catch(() => null)
+        toast.error(errorData?.error || '文本处理失败，请稍后重试')
       }
     } catch {
-      toast.error('处理失败')
+      toast.error('文本处理失败，请检查网络连接后重试')
     } finally {
       setProcessing(false)
       setActiveAction(null)
@@ -161,7 +156,7 @@ export function RefinePanel({ projectId }: RefinePanelProps) {
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center">
                     <Loader2 className="w-6 h-6 text-amber-500 animate-spin mx-auto mb-2" />
-                    <p className="text-sm text-stone-500 dark:text-stone-400">正在处理中...</p>
+                    <p className="text-sm text-stone-500 dark:text-stone-400">AI正在处理文本...</p>
                   </div>
                 </div>
               ) : outputText ? (

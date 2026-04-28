@@ -138,50 +138,11 @@ export function CharactersPanel({ projectId }: CharactersPanelProps) {
         setCharacters((prev) => [...prev, ...newChars])
         toast.success(`AI生成了 ${newChars.length} 个角色`)
       } else {
-        // Fallback demo
-        const demoChars: Character[] = [
-          {
-            id: `demo-${Date.now()}-1`,
-            name: '林逸',
-            role: 'protagonist',
-            personality: '坚毅果敢，内心善良但外表冷漠。面对困境从不退缩，但常常独自承担一切。',
-            motivation: '寻找身世真相，保护身边的人',
-            arc: '从孤僻少年成长为承担责任的一方之主',
-            relationships: '与苏瑶互为知己，与萧寒亦敌亦友',
-            appearance: '身材修长，眉目英挺，眼神深邃如星空，常着青色长衫',
-            background: '自幼在山村长大，不知自己的真实身份',
-            order: 0,
-          },
-          {
-            id: `demo-${Date.now()}-2`,
-            name: '苏瑶',
-            role: 'supporting',
-            personality: '温柔聪慧，心思细腻。表面柔弱，实则内心极有主见。',
-            motivation: '解开家族诅咒，守护林逸',
-            arc: '从受保护的千金小姐到独当一面的强者',
-            relationships: '与林逸互为知己，是萧寒的师妹',
-            appearance: '容貌清丽脱俗，眉间一点朱砂，常着白色衣裙',
-            background: '大家族出身，但家族背负着神秘诅咒',
-            order: 1,
-          },
-          {
-            id: `demo-${Date.now()}-3`,
-            name: '萧寒',
-            role: 'antagonist',
-            personality: '野心勃勃，城府极深。表面温文尔雅，实则冷酷无情。',
-            motivation: '追求绝对力量，改变现有秩序',
-            arc: '从天才少年走向极端的复仇之路',
-            relationships: '与林逸亦敌亦友，是苏瑶的师兄',
-            appearance: '面容俊朗，但笑意不达眼底，常着玄色长袍',
-            background: '幼年被灭门，被宗门收养后成为天才弟子',
-            order: 2,
-          },
-        ]
-        setCharacters((prev) => [...prev, ...demoChars])
-        toast.success('AI生成了 3 个角色（演示模式）')
+        const errorData = await res.json().catch(() => null)
+        toast.error(errorData?.error || 'AI生成角色失败，请稍后重试')
       }
     } catch {
-      toast.error('AI生成角色失败')
+      toast.error('AI生成角色失败，请检查网络连接后重试')
     } finally {
       setGenerating(false)
     }
@@ -238,7 +199,7 @@ export function CharactersPanel({ projectId }: CharactersPanelProps) {
             className="border-amber-200 dark:border-stone-600 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-stone-800"
           >
             {generating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-            AI生成角色
+            {generating ? 'AI生成中...' : 'AI生成角色'}
           </Button>
           <Button
             onClick={() => setDialogOpen(true)}

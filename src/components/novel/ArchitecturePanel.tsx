@@ -55,16 +55,16 @@ export function ArchitecturePanel({ projectId, project }: ArchitecturePanelProps
         body: JSON.stringify({ coreSeed }),
       })
 
-      // Simulate generation progress
+      // Progress indicator for AI generation
       const progressInterval = setInterval(() => {
         setProgress((prev) => {
           if (prev >= 90) {
             clearInterval(progressInterval)
             return 90
           }
-          return prev + Math.random() * 15
+          return prev + Math.random() * 10
         })
-      }, 500)
+      }, 800)
 
       const res = await fetch('/api/architecture/generate', {
         method: 'POST',
@@ -80,42 +80,11 @@ export function ArchitecturePanel({ projectId, project }: ArchitecturePanelProps
         setArchitecture(data)
         toast.success('架构生成完成')
       } else {
-        // Fallback to demo data
-        setArchitecture({
-          coreSeed,
-          characterDynamics: '主角与反派之间存在亦敌亦友的关系，二人在追求同一目标的过程中不断碰撞与融合。配角群体围绕核心冲突形成多维度的人际网络，既有利益同盟也有价值对立。',
-          worldviewFramework: '以修真体系为核心的世界架构，灵气复苏带来社会结构重塑。凡人与修者之间的矛盾构成社会张力，各大宗门势力角逐形成政治格局。',
-          plotArchitecture: '三幕式结构：启程(1-10章)→成长(11-25章)→决战(26-30章)。第一幕建立世界观与核心矛盾，第二幕推进角色成长与势力角逐，第三幕汇聚所有伏笔完成高潮与收束。',
-          rhythmPoints: [
-            { chapter: 1, intensity: 60, label: '开篇引入' },
-            { chapter: 5, intensity: 75, label: '第一冲突' },
-            { chapter: 10, intensity: 85, label: '转折点' },
-            { chapter: 15, intensity: 70, label: '低谷期' },
-            { chapter: 20, intensity: 80, label: '二次冲突' },
-            { chapter: 25, intensity: 90, label: '高潮预演' },
-            { chapter: 30, intensity: 100, label: '最终高潮' },
-          ],
-        })
-        toast.success('架构生成完成（演示模式）')
+        const errorData = await res.json().catch(() => null)
+        toast.error(errorData?.error || '架构生成失败，请稍后重试')
       }
     } catch {
-      // Fallback to demo data on error
-      setArchitecture({
-        coreSeed,
-        characterDynamics: '主角与反派之间存在亦敌亦友的关系，二人在追求同一目标的过程中不断碰撞与融合。配角群体围绕核心冲突形成多维度的人际网络。',
-        worldviewFramework: '以修真体系为核心的世界架构，灵气复苏带来社会结构重塑。凡人与修者之间的矛盾构成社会张力。',
-        plotArchitecture: '三幕式结构：启程(1-10章)→成长(11-25章)→决战(26-30章)。第一幕建立世界观与核心矛盾，第二幕推进角色成长与势力角逐。',
-        rhythmPoints: [
-          { chapter: 1, intensity: 60, label: '开篇引入' },
-          { chapter: 5, intensity: 75, label: '第一冲突' },
-          { chapter: 10, intensity: 85, label: '转折点' },
-          { chapter: 15, intensity: 70, label: '低谷期' },
-          { chapter: 20, intensity: 80, label: '二次冲突' },
-          { chapter: 25, intensity: 90, label: '高潮预演' },
-          { chapter: 30, intensity: 100, label: '最终高潮' },
-        ],
-      })
-      toast.success('架构生成完成（演示模式）')
+      toast.error('架构生成失败，请检查网络连接后重试')
     } finally {
       setGenerating(false)
     }
@@ -214,7 +183,7 @@ export function ArchitecturePanel({ projectId, project }: ArchitecturePanelProps
               {generating ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  生成中...
+                  AI正在生成架构...
                 </>
               ) : (
                 <>

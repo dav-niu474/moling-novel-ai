@@ -134,18 +134,11 @@ export function WorldviewPanel({ projectId }: WorldviewPanelProps) {
         setSettings((prev) => [...prev, ...newSettings])
         toast.success(`AI生成了 ${newSettings.length} 条世界观设定`)
       } else {
-        // Demo fallback
-        const demoSettings: WorldSetting[] = [
-          { id: `demo-${Date.now()}-1`, category: 'geography', name: '灵气大陆', description: '整片大陆被灵气覆盖，不同区域灵气浓度差异极大，形成独特的生态圈。', rules: '灵气浓度从中心向外递减，中心区域为禁地。', order: 0 },
-          { id: `demo-${Date.now()}-2`, category: 'power-system', name: '修真境界', description: '炼气→筑基→金丹→元婴→化神→大乘→渡劫，七大境界层层递进。', rules: '每次突破需消耗大量灵石，失败将反噬修为。', order: 1 },
-          { id: `demo-${Date.now()}-3`, category: 'faction', name: '天机阁', description: '掌控情报网络的神秘组织，据传能预知天机。', rules: '天机阁弟子不得参与世俗争斗，违者逐出。', order: 2 },
-          { id: `demo-${Date.now()}-4`, category: 'culture', name: '修真界礼仪', description: '修真界以实力为尊，但表面礼仪繁复，长幼尊卑严格。', rules: '晚辈见长辈须行叩拜礼，同辈之间以修为高低定座次。', order: 3 },
-        ]
-        setSettings((prev) => [...prev, ...demoSettings])
-        toast.success('AI生成了 4 条世界观设定（演示模式）')
+        const errorData = await res.json().catch(() => null)
+        toast.error(errorData?.error || 'AI生成世界观失败，请稍后重试')
       }
     } catch {
-      toast.error('AI生成世界观失败')
+      toast.error('AI生成世界观失败，请检查网络连接后重试')
     } finally {
       setGenerating(false)
     }
@@ -209,7 +202,7 @@ export function WorldviewPanel({ projectId }: WorldviewPanelProps) {
             className="border-amber-200 dark:border-stone-600 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-stone-800"
           >
             {generating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-            AI生成世界观
+            {generating ? 'AI生成中...' : 'AI生成世界观'}
           </Button>
           <Button
             onClick={() => setDialogOpen(true)}
