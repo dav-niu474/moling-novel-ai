@@ -1,0 +1,119 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id             String   @id @default(cuid())
+  title          String
+  genre          String
+  description    String   @default("")
+  chapterCount   Int      @default(30)
+  wordsPerChapter Int     @default(3000)
+  coreSeed       String   @default("")
+  status         String   @default("draft") // draft, architecting, outlining, writing, completed
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  characters     Character[]
+  worldSettings  WorldSetting[]
+  chapterOutlines ChapterOutline[]
+  chapterContents ChapterContent[]
+  promptTemplates PromptTemplate[]
+}
+
+model Character {
+  id            String   @id @default(cuid())
+  projectId     String
+  name          String
+  role          String   @default("supporting") // protagonist, antagonist, supporting, minor
+  personality   String   @default("")
+  motivation    String   @default("")
+  arc           String   @default("")
+  relationships String   @default("") // JSON string of relationships
+  appearance    String   @default("")
+  background    String   @default("")
+  order         Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model WorldSetting {
+  id          String   @id @default(cuid())
+  projectId   String
+  category    String   @default("general") // general, geography, culture, power-system, history, faction, technology, economy
+  name        String
+  description String   @default("")
+  rules       String   @default("") // Specific rules/laws of this world element
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model ChapterOutline {
+  id            String   @id @default(cuid())
+  projectId     String
+  chapterNumber Int
+  title         String   @default("")
+  summary       String   @default("")
+  keyPoints     String   @default("") // JSON array of key plot points
+  foreshadowing String   @default("") // JSON array of foreshadowing items
+  emotionBeat   String   @default("") // Emotional rhythm for this chapter
+  conflicts     String   @default("") // JSON array of conflicts
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chapterContent ChapterContent?
+
+  @@unique([projectId, chapterNumber])
+}
+
+model ChapterContent {
+  id            String   @id @default(cuid())
+  projectId     String
+  chapterNumber Int
+  content       String   @default("")
+  wordCount     Int      @default(0)
+  status        String   @default("draft") // draft, generated, polished, finalized
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chapterOutline ChapterOutline @relation(fields: [projectId, chapterNumber], references: [projectId, chapterNumber], onDelete: Cascade)
+
+  @@unique([projectId, chapterNumber])
+}
+
+model PromptTemplate {
+  id          String   @id @default(cuid())
+  projectId   String
+  name        String
+  category    String   @default("general") // architecture, character, worldview, outline, chapter, refine, check
+  content     String
+  isDefault   Boolean  @default(false)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model AISettings {
+  id        String   @id @default(cuid())
+  apiKey    String   @default("")
+  baseUrl   String   @default("https://api.openai.com/v1")
+  model     String   @default("gpt-4o-mini")
+  temperature Float   @default(0.7)
+  maxTokens Int      @default(4096)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

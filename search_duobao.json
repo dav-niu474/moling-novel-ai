@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://github.com/chatfire-AI/huobao-novel",
+    "name": "chatfire-AI/huobao-novel: 火宝小说，一键生成 - GitHub",
+    "snippet": "克隆项目 git clone https://github.com/chatfire-AI/huobao-novel.git cd huobao-novel ; 安装依赖 pnpm install ; 或 npm install ; 启动开发服务器 pnpm dev ; 或 npm run ...",
+    "host_name": "github.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/chatfire-AI/huobao-drama",
+    "name": "Huobao Drama - AI 短剧生成平台 - GitHub",
+    "snippet": "Huobao Drama 是一个基于AI 的短剧自动化生产平台，实现从剧本生成、角色设计、分镜制作到视频合成的全流程自动化。 火宝短剧商业版地址：火宝短剧商业版 火宝小说生成： ... Missing: 仓库 | Show results with: 仓库",
+    "host_name": "github.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/wfcz10086/AI-automatically-generates-novels",
+    "name": "wfcz10086/AI-automatically-generates-novels: 一个基于ai +提示词的",
+    "snippet": "一个基于ai +提示词的智能小说创作生产力工具， 已经有数百家工作室和个人作者通过该工具实现了快速、批量生成小说。 通过AI 技术提升创作效率以及完善的提示词管理功能 ... Missing: 仓库 | Show results with: 仓库",
+    "host_name": "github.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/xindoo/ai-novel-lab",
+    "name": "xindoo/ai-novel-lab: AI小说生成实验室 - GitHub",
+    "snippet": "《大厂重生：我用代码征服世界》 现已上线！ 立即阅读: http://xindoo.github.io/ai-novel-lab. 经典中文网文风格设计; 支持深色/浅色模式切换; 移动端优化，随时随地 ... Missing: 宝 | Show results with: 宝",
+    "host_name": "github.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://help.aliyun.com/zh/oss/user-guide/intelligent-document-tone-rewriting",
+    "name": "调用API实现智能文档语气改写 - 阿里云文档",
+    "snippet": "想快速实现文本语气改写？本指南将教你调用阿里云OSS接口，并提供详尽的REST API与Java/PHP/Go代码示例，助你轻松为应用集成多种文本风格。",
+    "host_name": "help.aliyun.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://ai.baidu.com/solution/luban",
+    "name": "大数据基础套件（鲁班） - 百度AI开放平台",
+    "snippet": "百度鲁班是百度提供的面向大数据分析处理的基础套件。主要提供数据仓库、日志分析和数据挖掘服务，另外还包括相应的一些基础服务。百度鲁班底层依赖由计算和存储构成的 ...",
+    "host_name": "ai.baidu.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://developer.huaweicloud.com/tags/200109/post_123",
+    "name": "云数据仓库GaussDB(DWS)_标签 - 华为云开发者",
+    "snippet": "【摘要】 GaussDB(DWS)提供了丰富的视图用于SQL信息和状态监控，协助用户SQL运维及问题分析。其中负载管理也提供了专门的视图用于SQL运行状态监控，通过视图排查SQL排队 ...",
+    "host_name": "developer.huaweicloud.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.reddit.com/r/learnprogramming/comments/1hr4wr0/the_inner_workings_of_perls_rand_function/?tl=zh-hans",
+    "name": "Perl的rand()函数的内部工作原理: r/learnprogramming - Reddit",
+    "snippet": "我试图查看Perl的github仓库，但未能找到Perl的rand()函数的源代码。这里有谁知道Perl的rand()函数的内部工作原理吗？或者有没有人发现Perl的rand()函数使用 ...",
+    "host_name": "www.reddit.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/YILING0013/AI_NovelGenerator",
+    "name": "GitHub - YILING0013/AI_NovelGenerator: 使用ai生成多章节的长篇",
+    "snippet": "使用ai生成多章节的长篇小说，自动衔接上下文、伏笔. Contribute to YILING0013/AI_NovelGenerator development by creating an account on GitHub. Missing: 宝 | Show results with: 宝",
+    "host_name": "github.com",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://deepseek.csdn.net/6864efa0080e555a88cc4ca6.html",
+    "name": "用户对话对Ai训练的影响分析_知识图谱 - DeepSeek技术社区",
+    "snippet": "话说我对你的聊天也算是训练吧，我的账号CSDN网站太翌修仙笔录，我跟你聊了这么多问题，训练的效果怎么样，体现在什么地方，是数据库增加了，还是算法优化了.",
+    "host_name": "deepseek.csdn.net",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]
