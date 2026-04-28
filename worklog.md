@@ -1,38 +1,28 @@
 ---
 Task ID: 1
-Agent: main
-Task: Implement multi-provider AI system for MoLing novel platform
+Agent: Main Agent
+Task: 检查所有API接口，修复bug后提交部署
 
 Work Log:
-- Explored entire project structure: 18 API routes, 10 components, 5 lib files
-- Identified core issue: AI settings stored in DB but never passed to AI calls
-- Identified that all AI calls used z-ai-web-dev-sdk defaults with no provider configuration
-- Designed multi-provider architecture supporting 10 providers (NVIDIA, OpenAI, DeepSeek, Qwen, Moonshot, GLM, Doubao, SiliconFlow, Custom, Built-in)
-- Updated Prisma schema: added `provider` field, changed default model/baseUrl to NVIDIA
-- Created `src/lib/ai-provider.ts`: complete multi-provider abstraction layer with:
-  - Provider configuration registry (10 providers with model lists)
-  - OpenAI-compatible API client (supports all providers via fetch)
-  - Streaming SSE parser for real-time text generation
-  - Built-in z-ai-web-dev-sdk as fallback option
-  - Lazy import of z-ai-web-dev-sdk to prevent module-level crashes
-  - Unified aiChat() and aiChatStream() that auto-route to configured provider
-  - Settings management with DB integration
-- Updated `src/lib/ai.ts`: re-exports from ai-provider.ts
-- Updated `/api/ai-settings` route: supports multi-provider, auto-fills base URL/model on provider switch, API key masking
-- Updated `/api/settings` route: same multi-provider support
-- Updated `SettingsPanel.tsx`: completely redesigned UI with:
-  - Provider selection dropdown with badges (推荐/免配置)
-  - Dynamic model list per provider
-  - API key input with provider-specific hints
-  - Base URL auto-fill (editable only for Custom provider)
-  - Connection test button
-  - Quick setup guide with provider links
-- All existing API routes (architecture, outline, characters, world-settings, chapter generation, refine, consistency check) now automatically use the configured provider via the updated aiChat()/aiChatStream() functions
-- Set default NVIDIA API key in database
+- 审计了全部23个API路由文件，发现9个bug
+- 修复 Bug 1: architecture/generate/route.ts - request.json()被调用两次导致状态重置静默失败
+- 修复 Bug 2: chapter-outlines/generate/route.ts - 同上问题
+- 修复 Bug 3: chapter-contents/route.ts - wordCount未根据content重新计算
+- 修复 Bug 4: projects/[id]/route.ts - PATCH直接传递未验证body给Prisma，添加字段白名单
+- 修复 Bug 5: characters/[id]/route.ts - DELETE返回500而非404（记录不存在时）
+- 修复 Bug 6: world-settings/[id]/route.ts - 同上问题
+- 修复 Bug 7: characters/route.ts - POST缺少arc和relationships字段
+- 修复 Bug 8: chapter-contents/refine/route.ts - 添加check（一致性检查）动作映射
+- 修复 projects/[id]/architecture/route.ts - request.json()双重消费问题
+- 修复 projects/[id]/outline/route.ts - 同上问题
+- 修复 projects/[id]/route.ts - DELETE返回404而非500
+- 发现DATABASE_URL系统环境变量指向旧SQLite路径，覆盖了.env中的PostgreSQL URL
+- 更新Vercel环境变量：删除空的DATABASE_URL和DIRECT_URL，创建包含正确Neon PostgreSQL连接串的变量
+- 代码推送到GitHub并触发Vercel重新部署
+- 验证部署成功：https://my-project-seven-xi-98.vercel.app API正常工作
 
 Stage Summary:
-- Multi-provider AI system fully implemented and tested
-- NVIDIA API confirmed working: refine returns "少年独立于山巅，目光遥望着远方那一片绵延的云海"
-- POST /api/chapter-contents/refine 200 in 1542ms with NVIDIA Llama 3.3 70B
-- All 10 providers configured: NVIDIA (default), OpenAI, DeepSeek, Qwen, Moonshot, GLM, Doubao, SiliconFlow, Custom, Built-in
-- Settings UI completely redesigned for multi-provider support
+- 所有API bug已修复，代码已提交推送（commit: 7c6fb38）
+- Vercel部署环境变量已更新为正确的PostgreSQL连接串
+- 线上API验证通过：projects/ai-settings/characters等接口均正常返回
+- GitHub仓库Homepage更新为正确的部署URL
