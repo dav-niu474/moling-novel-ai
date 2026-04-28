@@ -21,7 +21,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { projectId, name, role, personality, motivation, appearance, background } = body
+    const { projectId, name, role, personality, motivation, arc, relationships, appearance, background } = body
     if (!projectId || !name) {
       return NextResponse.json({ error: 'projectId and name are required' }, { status: 400 })
     }
@@ -33,6 +33,10 @@ export async function POST(request: Request) {
         role: role || 'supporting',
         personality: personality || '',
         motivation: motivation || '',
+        arc: arc || '',
+        relationships: typeof relationships === 'string'
+          ? relationships
+          : JSON.stringify(relationships || {}),
         appearance: appearance || '',
         background: background || '',
         order: count,

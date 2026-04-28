@@ -4,8 +4,12 @@ import { architecturePrompt } from '@/lib/prompts'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
+  let projectId: string | undefined
+  let coreSeed: string | undefined
   try {
-    const { projectId, coreSeed } = await request.json()
+    const body = await request.json()
+    projectId = body.projectId
+    coreSeed = body.coreSeed
     if (!projectId || !coreSeed) {
       return NextResponse.json({ error: 'projectId and coreSeed are required' }, { status: 400 })
     }
@@ -78,7 +82,7 @@ export async function POST(request: Request) {
     await db.$transaction(async (tx) => {
       // Update project core seed
       await tx.project.update({
-        where: { id: projectId },
+        where: { id: projectId! },
         data: {
           coreSeed: architecture.coreSeed || coreSeed,
           status: 'architecting',
@@ -86,14 +90,14 @@ export async function POST(request: Request) {
       })
 
       // Delete existing characters and world settings (regenerating)
-      await tx.character.deleteMany({ where: { projectId } })
-      await tx.worldSetting.deleteMany({ where: { projectId } })
+      await tx.character.deleteMany({ where: { projectId: projectId! } })
+      await tx.worldSetting.deleteMany({ where: { projectId: projectId! } })
 
       // Save characters
       if (architecture.characters && architecture.characters.length > 0) {
         await tx.character.createMany({
           data: architecture.characters.map((char, index) => ({
-            projectId,
+            projectId: projectId!,
             name: char.name,
             role: char.role || 'supporting',
             personality: char.personality || '',
@@ -114,7 +118,7 @@ export async function POST(request: Request) {
       if (architecture.worldSettings && architecture.worldSettings.length > 0) {
         await tx.worldSetting.createMany({
           data: architecture.worldSettings.map((ws, index) => ({
-            projectId,
+            projectId: projectId!,
             category: ws.category || 'general',
             name: ws.name,
             description: ws.description || '',
@@ -204,17 +208,16 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error('Architecture generation failed:', error)
-    // Try to reset status
-    try {
-      const { projectId } = await request.json()
-      if (projectId) {
+    // Try to reset status using saved projectId
+    if (projectId) {
+      try {
         await db.project.update({
           where: { id: projectId },
           data: { status: 'draft' },
         })
+      } catch {
+        // Ignore reset errors
       }
-    } catch {
-      // Ignore reset errors
     }
     return NextResponse.json({ error: '架构生成失败，请重试' }, { status: 500 })
   }

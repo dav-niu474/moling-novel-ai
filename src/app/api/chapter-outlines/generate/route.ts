@@ -4,8 +4,10 @@ import { outlinePrompt } from '@/lib/prompts'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
+  let projectId: string | undefined
   try {
-    const { projectId } = await request.json()
+    const body = await request.json()
+    projectId = body.projectId
     if (!projectId) {
       return NextResponse.json({ error: 'projectId is required' }, { status: 400 })
     }
@@ -94,13 +96,13 @@ export async function POST(request: Request) {
     // Save outlines to database
     await db.$transaction(async (tx) => {
       // Delete existing outlines for this project
-      await tx.chapterOutline.deleteMany({ where: { projectId } })
+      await tx.chapterOutline.deleteMany({ where: { projectId: projectId! } })
 
       // Create new outlines
       for (const outline of outlines) {
         await tx.chapterOutline.create({
           data: {
-            projectId,
+            projectId: projectId!,
             chapterNumber: outline.chapterNumber,
             title: outline.title || `第${outline.chapterNumber}章`,
             summary: outline.summary || '',
@@ -123,7 +125,7 @@ export async function POST(request: Request) {
 
       // Update project status
       await tx.project.update({
-        where: { id: projectId },
+        where: { id: projectId! },
         data: { status: 'outlining' },
       })
     })
@@ -137,16 +139,16 @@ export async function POST(request: Request) {
     return NextResponse.json(savedOutlines)
   } catch (error) {
     console.error('Outline generation failed:', error)
-    try {
-      const { projectId } = await request.json()
-      if (projectId) {
+    // Use saved projectId to reset status
+    if (projectId) {
+      try {
         await db.project.update({
           where: { id: projectId },
           data: { status: 'architecting' },
         })
+      } catch {
+        // Ignore reset errors
       }
-    } catch {
-      // Ignore reset errors
     }
     return NextResponse.json({ error: '大纲生成失败，请重试' }, { status: 500 })
   }

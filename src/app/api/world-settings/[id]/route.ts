@@ -9,7 +9,10 @@ export async function DELETE(
     const { id } = await params
     await db.worldSetting.delete({ where: { id } })
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.code === 'P2025') {
+      return NextResponse.json({ error: 'World setting not found' }, { status: 404 })
+    }
     return NextResponse.json({ error: 'Failed to delete world setting' }, { status: 500 })
   }
 }

@@ -8,8 +8,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let projectId: string | undefined;
   try {
     const { id } = await params;
+    projectId = id;
     const body = await request.json();
     const { coreSeed } = body;
 
@@ -105,14 +107,14 @@ export async function POST(
             projectId: id,
             name: char.name,
             role: char.role || 'supporting',
-            personality: char.personality,
-            motivation: char.motivation,
-            arc: char.arc,
+            personality: char.personality || '',
+            motivation: char.motivation || '',
+            arc: char.arc || '',
             relationships: typeof char.relationships === 'string'
               ? char.relationships
               : JSON.stringify(char.relationships || {}),
-            appearance: char.appearance,
-            background: char.background,
+            appearance: char.appearance || '',
+            background: char.background || '',
             order: index,
           })),
         });
@@ -125,8 +127,8 @@ export async function POST(
             projectId: id,
             category: ws.category || 'general',
             name: ws.name,
-            description: ws.description,
-            rules: ws.rules,
+            description: ws.description || '',
+            rules: ws.rules || '',
             order: index,
           })),
         });
@@ -153,15 +155,16 @@ export async function POST(
     });
   } catch (error) {
     console.error('Architecture generation failed:', error);
-    // Try to reset status
-    try {
-      const { id } = await params;
-      await db.project.update({
-        where: { id },
-        data: { status: 'draft' },
-      });
-    } catch {
-      // Ignore reset errors
+    // Try to reset status using saved projectId
+    if (projectId) {
+      try {
+        await db.project.update({
+          where: { id: projectId },
+          data: { status: 'draft' },
+        });
+      } catch {
+        // Ignore reset errors
+      }
     }
     return NextResponse.json(
       { success: false, error: '架构生成失败，请重试' },

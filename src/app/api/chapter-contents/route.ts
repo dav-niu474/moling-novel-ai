@@ -32,11 +32,12 @@ export async function PUT(request: Request) {
     })
 
     if (existing) {
+      const finalContent = content ?? existing.content
       const updated = await db.chapterContent.update({
         where: { id: existing.id },
         data: {
-          content: content ?? existing.content,
-          wordCount: wordCount ?? existing.wordCount,
+          content: finalContent,
+          wordCount: wordCount ?? finalContent.length,
           status: status ?? existing.status,
         },
       })
@@ -47,20 +48,24 @@ export async function PUT(request: Request) {
         where: { projectId_chapterNumber: { projectId, chapterNumber } },
       })
 
+      const contentValue = content || ''
+      const wordCountValue = wordCount || contentValue.length
+      const statusValue = status || 'draft'
+
       if (outline) {
         const created = await db.chapterContent.create({
           data: {
             projectId,
             chapterNumber,
-            content: content || '',
-            wordCount: wordCount || 0,
-            status: status || 'draft',
+            content: contentValue,
+            wordCount: wordCountValue,
+            status: statusValue,
           },
         })
         return NextResponse.json(created)
       } else {
         // Create outline first, then content
-        const newOutline = await db.chapterOutline.create({
+        await db.chapterOutline.create({
           data: {
             projectId,
             chapterNumber,
@@ -71,9 +76,9 @@ export async function PUT(request: Request) {
           data: {
             projectId,
             chapterNumber,
-            content: content || '',
-            wordCount: wordCount || 0,
-            status: status || 'draft',
+            content: contentValue,
+            wordCount: wordCountValue,
+            status: statusValue,
           },
         })
         return NextResponse.json(created)

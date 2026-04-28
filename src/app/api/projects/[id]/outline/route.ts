@@ -8,8 +8,10 @@ export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let projectId: string | undefined;
   try {
     const { id } = await params;
+    projectId = id;
 
     // Get project with characters and world settings
     const project = await db.project.findUnique({
@@ -74,10 +76,10 @@ export async function POST(
           chapterNumber: number;
           title: string;
           summary: string;
-          keyPoints: string[];
-          foreshadowing: string[];
+          keyPoints: string[] | string;
+          foreshadowing: string[] | string;
           emotionBeat: string;
-          conflicts: Array<{ type: string; description: string }>;
+          conflicts: Array<{ type: string; description: string }> | string;
         }>
       >(resultText);
     } catch (parseError) {
@@ -138,23 +140,21 @@ export async function POST(
       orderBy: { chapterNumber: 'asc' },
     });
 
-    return NextResponse.json({
-      success: true,
-      data: savedOutlines,
-    });
+    return NextResponse.json(savedOutlines);
   } catch (error) {
     console.error('Outline generation failed:', error);
-    try {
-      const { id } = await params;
-      await db.project.update({
-        where: { id },
-        data: { status: 'architecting' },
-      });
-    } catch {
-      // Ignore
+    if (projectId) {
+      try {
+        await db.project.update({
+          where: { id: projectId },
+          data: { status: 'architecting' },
+        });
+      } catch {
+        // Ignore
+      }
     }
     return NextResponse.json(
-      { success: false, error: '大纲生成失败，请重试' },
+      { error: '大纲生成失败，请重试' },
       { status: 500 }
     );
   }

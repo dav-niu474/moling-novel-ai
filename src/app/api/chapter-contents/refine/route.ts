@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 
 // Map frontend actions to refinePrompt actions
 // refinePrompt supports: 'polish' | 'expand' | 'deAI' | 'strengthen'
-// Frontend sends: 'polish' | 'expand' | 'de-ai' | 'conflict' | 'detail' | 'dialogue'
+// Frontend sends: 'polish' | 'expand' | 'de-ai' | 'conflict' | 'detail' | 'dialogue' | 'check'
 function mapAction(action: string): { promptAction: 'polish' | 'expand' | 'deAI' | 'strengthen'; customSystem?: string; customUser?: string } {
   switch (action) {
     case 'polish':
@@ -17,6 +17,21 @@ function mapAction(action: string): { promptAction: 'polish' | 'expand' | 'deAI'
       return { promptAction: 'strengthen' }
     case 'detail':
       return { promptAction: 'expand' }
+    case 'check':
+      return {
+        promptAction: 'polish',
+        customSystem: `你是一位资深网文编辑，擅长检查文本的一致性问题。
+
+你的任务是：仔细检查文本中的逻辑一致性，发现并指出以下问题：
+1. 角色行为是否与其性格设定一致
+2. 时间线是否合理
+3. 世界观规则是否前后矛盾
+4. 情节逻辑是否有漏洞
+5. 称呼和关系是否前后一致
+
+请直接指出发现的问题，并给出修改建议。如果没有发现问题，请说明文本一致性良好。`,
+        customUser: `请检查以下文本的一致性问题：\n\n`,
+      }
     case 'dialogue':
       return {
         promptAction: 'polish',
