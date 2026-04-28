@@ -44,7 +44,7 @@
 | 样式 | [Tailwind CSS 4](https://tailwindcss.com) + [shadcn/ui](https://ui.shadcn.com) |
 | 数据库 | [Prisma ORM](https://www.prisma.io) + [PostgreSQL](https://www.postgresql.org) (Vercel Postgres) |
 | 状态管理 | [Zustand](https://zustand.docs.pmnd.rs) + [TanStack Query](https://tanstack.com/query) |
-| AI 能力 | [z-ai-web-dev-sdk](https://www.npmjs.com/package/z-ai-web-dev-sdk) |
+| AI 能力 | 多模型供应商支持 (NVIDIA NIM / OpenAI / DeepSeek / 通义千问 / Moonshot / 智谱GLM / 豆包 / SiliconFlow / 自定义 / 内置) |
 | 动画 | [Framer Motion](https://www.framer.com/motion) |
 
 ---
@@ -85,7 +85,8 @@ moling-novel-ai/
 │   │   └── ui/               # shadcn/ui 组件
 │   ├── hooks/                 # 自定义 Hooks
 │   └── lib/                   # 工具函数和配置
-│       ├── ai.ts              # AI 调用封装
+│       ├── ai.ts              # AI 模块入口 (re-export)
+│       ├── ai-provider.ts     # 多模型供应商抽象层
 │       ├── db.ts              # 数据库客户端
 │       ├── prompts.ts         # 提示词模板
 │       ├── store.ts           # Zustand 状态管理
@@ -139,9 +140,10 @@ bun run dev
 
 | 变量名 | 说明 | 示例 |
 | --- | --- | --- |
-| `DATABASE_URL` | PostgreSQL 数据库连接字符串 | `postgresql://user:password@localhost:5432/moling` |
+| `DATABASE_URL` | PostgreSQL 数据库连接字符串 (连接池模式) | `postgresql://user:password@host/db?sslmode=require` |
+| `DIRECT_URL` | PostgreSQL 直连 URL (用于 Prisma 迁移) | `postgresql://user:password@host/db?sslmode=require` |
 
-> 💡 **提示**：AI 相关的 API 密钥和模型配置在应用内的 **设置面板** 中管理，无需在环境变量中配置。
+> 💡 **提示**：AI 相关的 API 密钥和模型配置在应用内的 **设置面板** 中管理，无需在环境变量中配置。支持 10 种模型供应商，默认使用 NVIDIA NIM (免费)。
 
 ---
 
@@ -196,12 +198,29 @@ bun run dev
 | `POST` | `/api/chapter-contents/generate` | AI 生成正文（流式） |
 | `POST` | `/api/chapter-contents/refine` | AI 润色文本 |
 
-### 设置
+### AI 设置
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `GET` | `/api/settings` | 获取应用设置 |
-| `POST` | `/api/settings` | 更新应用设置 |
+| `GET` | `/api/ai-settings` | 获取 AI 设置 (含供应商列表) |
+| `PUT` | `/api/ai-settings` | 更新 AI 设置 |
+| `GET` | `/api/settings` | 获取应用设置 (API Key 脱敏) |
+| `PUT` | `/api/settings` | 更新应用设置 |
+
+### 支持的 AI 供应商
+
+| 供应商 | 说明 | 免费使用 |
+| --- | --- | --- |
+| 🟢 NVIDIA NIM | 免费提供 DeepSeek R1、Llama 等开源大模型 | ✅ |
+| 🔵 OpenAI | GPT-4o、GPT-4o Mini 等 | ❌ |
+| 🔵 DeepSeek | DeepSeek Chat (V3)、DeepSeek Reasoner (R1) | ❌ |
+| 🔵 通义千问 | Qwen Turbo / Plus / Max / Long | ❌ |
+| 🔵 Moonshot | Kimi 大模型，长上下文支持 | ❌ |
+| 🔵 智谱 GLM | GLM-4 Plus / Flash / Long / Air | ❌ |
+| 🔵 豆包 | 字节跳动大模型，性价比高 | ❌ |
+| 🔵 SiliconFlow | 硅基流动，国内推理平台 | 部分 |
+| ⚙️ 自定义 | 任何 OpenAI 兼容 API (OneAPI/New API 等) | - |
+| 🆓 内置模型 | 平台内置 AI，无需配置 | ✅ |
 
 ---
 
