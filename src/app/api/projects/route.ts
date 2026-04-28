@@ -17,8 +17,7 @@ export async function GET() {
     return NextResponse.json(projects)
   } catch (error) {
     console.error('Failed to fetch projects:', error)
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    return NextResponse.json({ error: 'Failed to fetch projects', detail: message }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to fetch projects' }, { status: 500 })
   }
 }
 
@@ -45,7 +44,6 @@ export async function POST(request: Request) {
     return NextResponse.json(project)
   } catch (error) {
     console.error('Failed to create project:', error)
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    return NextResponse.json({ error: 'Failed to create project', detail: message }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to create project' }, { status: 500 })
   }
 }
