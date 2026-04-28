@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getProviderConfig, AI_PROVIDERS } from '@/lib/ai-provider';
 
 // GET /api/settings - Get current AI settings (mask apiKey)
 export async function GET() {
@@ -7,19 +8,18 @@ export async function GET() {
     let settings = await db.aISettings.findFirst();
 
     if (!settings) {
-      // Create default settings if none exist
       settings = await db.aISettings.create({
         data: {
+          provider: 'nvidia',
           apiKey: '',
-          baseUrl: 'https://api.openai.com/v1',
-          model: 'gpt-4o-mini',
+          baseUrl: 'https://integrate.api.nvidia.com/v1',
+          model: 'deepseek-ai/deepseek-r1',
           temperature: 0.7,
-          maxTokens: 4096,
+          maxTokens: 8192,
         },
       });
     }
 
-    // Mask the API key for security
     const maskedApiKey = settings.apiKey
       ? settings.apiKey.slice(0, 4) + '****' + settings.apiKey.slice(-4)
       : '';
@@ -30,6 +30,15 @@ export async function GET() {
         ...settings,
         apiKey: maskedApiKey,
         hasApiKey: !!settings.apiKey,
+        providers: AI_PROVIDERS.map((p) => ({
+          id: p.id,
+          name: p.name,
+          baseUrl: p.baseUrl,
+          models: p.models,
+          defaultModel: p.defaultModel,
+          apiKeyPrefix: p.apiKeyPrefix,
+          description: p.description,
+        })),
       },
     });
   } catch (error) {
@@ -45,15 +54,25 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { apiKey, baseUrl, model, temperature, maxTokens } = body;
+    const { provider: rawProvider, apiKey, baseUrl: rawBaseUrl, model: rawModel, temperature, maxTokens } = body;
 
-    // Get or create settings
-    let settings = await db.aISettings.findFirst();
+    // Validate and auto-fill provider config
+    const provider = rawProvider || 'nvidia';
+    const providerConfig = getProviderConfig(provider);
 
-    const updateData: Record<string, unknown> = {};
-    if (apiKey !== undefined) updateData.apiKey = apiKey;
-    if (baseUrl !== undefined) updateData.baseUrl = baseUrl;
-    if (model !== undefined) updateData.model = model;
+    let baseUrl = rawBaseUrl;
+    let model = rawModel;
+
+    if (providerConfig && provider !== 'custom' && provider !== 'builtin') {
+      if (!baseUrl) baseUrl = providerConfig.baseUrl;
+      if (providerConfig.models.length > 0 && model) {
+        const modelExists = providerConfig.models.some((m) => m.id === model);
+        if (!modelExists) model = providerConfig.defaultModel;
+      } else if (!model) {
+        model = providerConfig.defaultModel;
+      }
+    }
+
     if (temperature !== undefined) {
       if (typeof temperature !== 'number' || temperature < 0 || temperature > 2) {
         return NextResponse.json(
@@ -61,8 +80,8 @@ export async function PUT(request: NextRequest) {
           { status: 400 }
         );
       }
-      updateData.temperature = temperature;
     }
+
     if (maxTokens !== undefined) {
       if (typeof maxTokens !== 'number' || maxTokens < 1) {
         return NextResponse.json(
@@ -70,8 +89,18 @@ export async function PUT(request: NextRequest) {
           { status: 400 }
         );
       }
-      updateData.maxTokens = maxTokens;
     }
+
+    let settings = await db.aISettings.findFirst();
+
+    const updateData: Record<string, unknown> = {
+      provider,
+      baseUrl: baseUrl || providerConfig?.baseUrl || '',
+      model: model || providerConfig?.defaultModel || '',
+    };
+    if (temperature !== undefined) updateData.temperature = temperature;
+    if (maxTokens !== undefined) updateData.maxTokens = maxTokens;
+    if (apiKey && !apiKey.includes('****')) updateData.apiKey = apiKey;
 
     if (settings) {
       settings = await db.aISettings.update({
@@ -81,16 +110,16 @@ export async function PUT(request: NextRequest) {
     } else {
       settings = await db.aISettings.create({
         data: {
+          provider,
           apiKey: (apiKey as string) || '',
-          baseUrl: (baseUrl as string) || 'https://api.openai.com/v1',
-          model: (model as string) || 'gpt-4o-mini',
+          baseUrl: (baseUrl as string) || providerConfig?.baseUrl || '',
+          model: (model as string) || providerConfig?.defaultModel || '',
           temperature: (temperature as number) ?? 0.7,
-          maxTokens: (maxTokens as number) ?? 4096,
+          maxTokens: (maxTokens as number) ?? 8192,
         },
       });
     }
 
-    // Mask the API key in response
     const maskedApiKey = settings.apiKey
       ? settings.apiKey.slice(0, 4) + '****' + settings.apiKey.slice(-4)
       : '';
@@ -101,6 +130,15 @@ export async function PUT(request: NextRequest) {
         ...settings,
         apiKey: maskedApiKey,
         hasApiKey: !!settings.apiKey,
+        providers: AI_PROVIDERS.map((p) => ({
+          id: p.id,
+          name: p.name,
+          baseUrl: p.baseUrl,
+          models: p.models,
+          defaultModel: p.defaultModel,
+          apiKeyPrefix: p.apiKeyPrefix,
+          description: p.description,
+        })),
       },
     });
   } catch (error) {
