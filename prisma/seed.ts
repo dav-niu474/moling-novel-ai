@@ -14,7 +14,7 @@ async function main() {
         provider: 'nvidia',
         apiKey: process.env.NVIDIA_API_KEY || '',
         baseUrl: 'https://integrate.api.nvidia.com/v1',
-        model: 'deepseek-ai/deepseek-v4-flash',
+        model: 'meta/llama-3.3-70b-instruct',
         temperature: 0.7,
         maxTokens: 8192,
       },
@@ -26,9 +26,9 @@ async function main() {
     if (deprecatedModels.includes(existing.model)) {
       await prisma.aISettings.update({
         where: { id: existing.id },
-        data: { model: 'deepseek-ai/deepseek-v4-flash' },
+        data: { model: 'meta/llama-3.3-70b-instruct' },
       })
-      console.log('✅ Updated deprecated model to deepseek-ai/deepseek-v4-flash')
+      console.log('✅ Updated deprecated model to meta/llama-3.3-70b-instruct')
     } else {
       console.log('✅ AI settings already configured')
     }
