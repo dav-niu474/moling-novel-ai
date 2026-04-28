@@ -105,3 +105,34 @@ Stage Summary:
 - Lint检查通过
 - API测试通过
 - 平台可正常使用
+
+---
+Task ID: Vercel-Deploy
+Agent: Main Agent
+Task: 部署到Vercel + PostgreSQL迁移
+
+Work Log:
+- 移除 .env 从 Git 追踪，添加 .vercelignore
+- 调整 next.config.ts 移除 output:standalone，添加 serverExternalPackages
+- 添加 postinstall 脚本确保 prisma generate
+- 首次部署到 Vercel（使用临时 SQLite）
+- 推送代码到 GitHub 远程仓库
+
+Work Log (第二轮 - PostgreSQL迁移):
+- 创建 README.md 和 .env.example
+- 重命名 Vercel 项目为 moling-novel-ai
+- 用户手动配置了 Vercel Postgres (Neon) 数据库
+- Prisma schema 从 SQLite 迁移到 PostgreSQL（添加 directUrl）
+- 更新 db.ts 去除 SQLite 临时处理
+- 更新 Vercel 环境变量（DATABASE_URL + DIRECT_URL 指向 Neon Postgres）
+- 删除旧 SQLite 数据库文件
+- 更新 package.json 项目名称和 build 脚本
+- 推送代码并重新部署到 Vercel
+
+Stage Summary:
+- Vercel 项目名称：moling-novel-ai
+- 生产URL：https://my-project-seven-xi-98.vercel.app
+- GitHub仓库：https://github.com/dav-niu474/moling-novel-ai
+- 数据库：Neon PostgreSQL (Vercel Postgres)
+- 生产环境 API 测试通过（GET/POST/DELETE）
+- 所有 .env 等敏感文件已从 Git 移除
