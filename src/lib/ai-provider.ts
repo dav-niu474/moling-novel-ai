@@ -473,6 +473,27 @@ export async function aiChatStream(
 }
 
 /**
+ * Collect full text from a streaming AI response.
+ * Uses streaming internally to avoid Vercel serverless timeout,
+ * but returns the complete text after generation finishes.
+ * This ensures DB operations can complete before the function exits.
+ */
+export async function aiChatStreamCollect(
+  messages: ChatMessage[],
+  options?: { model?: string; temperature?: number; maxTokens?: number }
+): Promise<string> {
+  const stream = await aiChatStream(messages, options);
+  let fullContent = '';
+  for await (const chunk of stream) {
+    const content = chunk.choices?.[0]?.delta?.content;
+    if (content) {
+      fullContent += content;
+    }
+  }
+  return fullContent;
+}
+
+/**
  * Create a ReadableStream from the AI streaming response
  * for use in Next.js API routes with proper formatting
  */

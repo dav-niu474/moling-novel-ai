@@ -7,6 +7,7 @@
 export {
   aiChat,
   aiChatStream,
+  aiChatStreamCollect,
   createStreamingResponse,
   parseAIJSON,
   isAIConfigured,
