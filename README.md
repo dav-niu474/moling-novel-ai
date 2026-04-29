@@ -4,7 +4,7 @@
 
 ### AI网文创作平台
 
-[![Vercel](https://img.shields.io/badge/Vercel-Deploy-000?logo=vercel&logoColor=white)](https://my-project-seven-xi-98.vercel.app)
+[![Vercel](https://img.shields.io/badge/Vercel-Deploy-000?logo=vercel&logoColor=white)](https://moling-novel-ai-app-anything.vercel.app)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=next.js&logoColor=white)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io)
