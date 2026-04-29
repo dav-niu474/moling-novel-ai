@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { db, ensureDbInitialized } from '@/lib/db'
 import { aiChat, parseAIJSON } from '@/lib/ai'
 import { characterDesignPrompt } from '@/lib/prompts'
 import { NextResponse } from 'next/server'
@@ -7,6 +7,7 @@ export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
+    await ensureDbInitialized()
     const { projectId } = await request.json()
     if (!projectId) {
       return NextResponse.json({ error: 'projectId is required' }, { status: 400 })

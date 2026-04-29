@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { db, ensureDbInitialized } from '@/lib/db'
 import { aiChatStream, createStreamingResponse, parseAIJSON } from '@/lib/ai'
 import { architecturePrompt } from '@/lib/prompts'
 import { NextResponse } from 'next/server'
@@ -11,6 +11,7 @@ export async function POST(request: Request) {
   let projectId: string | undefined
   let coreSeed: string | undefined
   try {
+    await ensureDbInitialized()
     const body = await request.json()
     projectId = body.projectId
     coreSeed = body.coreSeed

@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { db, ensureDbInitialized } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
 export async function DELETE(
@@ -6,6 +6,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await ensureDbInitialized()
     const { id } = await params
     await db.character.delete({ where: { id } })
     return NextResponse.json({ success: true })

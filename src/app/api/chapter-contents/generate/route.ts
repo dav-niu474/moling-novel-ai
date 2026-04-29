@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { db, ensureDbInitialized } from '@/lib/db'
 import { aiChatStream, createStreamingResponse } from '@/lib/ai'
 import { chapterWritingPrompt } from '@/lib/prompts'
 import { NextResponse } from 'next/server'
@@ -7,6 +7,7 @@ export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
+    await ensureDbInitialized()
     const { projectId, chapterNumber } = await request.json()
     if (!projectId || !chapterNumber) {
       return NextResponse.json(

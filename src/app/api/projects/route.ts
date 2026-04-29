@@ -1,8 +1,9 @@
-import { db } from '@/lib/db'
+import { db, ensureDbInitialized } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
 export async function GET() {
   try {
+    await ensureDbInitialized()
     const projects = await db.project.findMany({
       orderBy: { updatedAt: 'desc' },
       include: {
@@ -17,18 +18,16 @@ export async function GET() {
     return NextResponse.json(projects)
   } catch (error: any) {
     console.error('Failed to fetch projects:', error)
-    // Return detailed error for debugging (remove in production)
     return NextResponse.json({
       error: 'Failed to fetch projects',
-      details: error?.message || String(error),
-      code: error?.code,
-      meta: error?.meta,
+      details: process.env.NODE_ENV === 'production' ? undefined : error?.message,
     }, { status: 500 })
   }
 }
 
 export async function POST(request: Request) {
   try {
+    await ensureDbInitialized()
     const body = await request.json()
     const { title, genre, description, chapterCount, wordsPerChapter } = body
 
@@ -50,12 +49,9 @@ export async function POST(request: Request) {
     return NextResponse.json(project)
   } catch (error: any) {
     console.error('Failed to create project:', error)
-    // Return detailed error for debugging (remove in production)
     return NextResponse.json({
       error: 'Failed to create project',
-      details: error?.message || String(error),
-      code: error?.code,
-      meta: error?.meta,
+      details: process.env.NODE_ENV === 'production' ? undefined : error?.message,
     }, { status: 500 })
   }
 }

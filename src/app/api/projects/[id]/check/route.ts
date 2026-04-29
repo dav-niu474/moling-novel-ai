@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, ensureDbInitialized } from '@/lib/db';
 import { aiChat, parseAIJSON } from '@/lib/ai';
 import { consistencyCheckPrompt } from '@/lib/prompts';
 
@@ -19,6 +19,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await ensureDbInitialized();
     const { id } = await params;
     const body = await request.json();
     const { chapterNumber, content } = body;

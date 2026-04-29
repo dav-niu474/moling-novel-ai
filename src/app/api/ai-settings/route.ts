@@ -1,9 +1,10 @@
-import { db } from '@/lib/db'
+import { db, ensureDbInitialized } from '@/lib/db'
 import { getProviderConfig, AI_PROVIDERS } from '@/lib/ai-provider'
 import { NextResponse } from 'next/server'
 
 export async function GET() {
   try {
+    await ensureDbInitialized()
     let settings = await db.aISettings.findFirst()
 
     if (!settings) {
@@ -47,6 +48,7 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
+    await ensureDbInitialized()
     const body = await request.json()
     const existing = await db.aISettings.findFirst()
 

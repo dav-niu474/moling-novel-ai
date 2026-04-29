@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { db, ensureDbInitialized } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
 export async function GET(
@@ -6,6 +6,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await ensureDbInitialized()
     const { id } = await params
     const project = await db.project.findUnique({
       where: { id },
@@ -32,6 +33,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await ensureDbInitialized()
     const { id } = await params
     const body = await request.json()
 
@@ -61,6 +63,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await ensureDbInitialized()
     const { id } = await params
     await db.project.delete({ where: { id } })
     return NextResponse.json({ success: true })

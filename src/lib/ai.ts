@@ -17,3 +17,6 @@ export {
 } from './ai-provider';
 
 export type { AISettingsConfig, ProviderConfig } from './ai-provider';
+
+// Re-export database utilities
+export { ensureDbInitialized } from './db';

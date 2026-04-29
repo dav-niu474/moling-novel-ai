@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, ensureDbInitialized } from '@/lib/db';
 import { getProviderConfig, AI_PROVIDERS } from '@/lib/ai-provider';
 
 // GET /api/settings - Get current AI settings (mask apiKey)
 export async function GET() {
   try {
+    await ensureDbInitialized();
     let settings = await db.aISettings.findFirst();
 
     if (!settings) {
@@ -53,6 +54,7 @@ export async function GET() {
 // PUT /api/settings - Update AI settings
 export async function PUT(request: NextRequest) {
   try {
+    await ensureDbInitialized();
     const body = await request.json();
     const { provider: rawProvider, apiKey, baseUrl: rawBaseUrl, model: rawModel, temperature, maxTokens } = body;
 

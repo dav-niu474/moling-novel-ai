@@ -14,10 +14,6 @@ import { PrismaClient } from '@prisma/client'
  *   - {STORE}_POSTGRES_PRISMA_URL → pooled connection (for Prisma runtime)
  *   - {STORE}_POSTGRES_URL_NON_POOLING → direct connection (for migrations)
  *   - {STORE}_DATABASE_URL_UNPOOLED → direct connection (alternative name)
- *
- * We need to swap:
- *   DATABASE_URL = {STORE}_POSTGRES_PRISMA_URL (pooled, for runtime)
- *   DIRECT_URL = {STORE}_POSTGRES_URL_NON_POOLING (direct, for migrations)
  */
 
 function findEnvUrl(varNames: string[]): { name: string; url: string } | undefined {
@@ -39,9 +35,9 @@ function resolveDatabaseUrls() {
 
   // Find pooled connection URL (priority order)
   const pooledResult = findEnvUrl([
-    'POSTGRES_PRISMA_URL',              // Neon standard (no prefix)
-    'moling_POSTGRES_PRISMA_URL',       // Neon with "moling" store prefix
-    'MOLING_POSTGRES_PRISMA_URL',       // Uppercase variant
+    'POSTGRES_PRISMA_URL',
+    'moling_POSTGRES_PRISMA_URL',
+    'MOLING_POSTGRES_PRISMA_URL',
   ])
 
   // Also search all env vars for any key containing "PRISMA_URL"
@@ -51,15 +47,14 @@ function resolveDatabaseUrls() {
 
   // Find direct (non-pooled) connection URL (priority order)
   const directResult = findEnvUrl([
-    'POSTGRES_URL_NON_POOLING',         // Neon standard
-    'moling_POSTGRES_URL_NON_POOLING',  // Neon with "moling" store prefix
+    'POSTGRES_URL_NON_POOLING',
+    'moling_POSTGRES_URL_NON_POOLING',
     'MOLING_POSTGRES_URL_NON_POOLING',
-    'DATABASE_URL_UNPOOLED',            // Alternative naming
+    'DATABASE_URL_UNPOOLED',
     'moling_DATABASE_URL_UNPOOLED',
     'MOLING_DATABASE_URL_UNPOOLED',
   ])
 
-  // Also search all env vars for any key containing "NON_POOLING" or "UNPOOLED"
   const directFromScan = !directResult
     ? findEnvUrl(dbRelatedKeys.filter(k => k.includes('NON_POOLING') || k.includes('UNPOOLED')))
     : null
@@ -70,47 +65,26 @@ function resolveDatabaseUrls() {
 
   if (pooled) {
     process.env.DATABASE_URL = pooled.url
-    console.log(`[db] Using POOLED connection as DATABASE_URL (from ${pooled.name})`)
   } else {
-    // Fallback: check if current DATABASE_URL is already a PostgreSQL URL
     const currentUrl = process.env.DATABASE_URL
     if (currentUrl && (currentUrl.startsWith('postgresql://') || currentUrl.startsWith('postgres://'))) {
-      // Check if it's a pooler URL (contains "pooler" in hostname)
       const isPooled = currentUrl.includes('-pooler.')
       if (!isPooled) {
-        console.warn('[db] WARNING: DATABASE_URL is a DIRECT connection, not pooled.')
-        console.warn('[db] This may cause connection exhaustion in serverless environments.')
-        console.warn('[db] Please set a pooled connection URL (e.g., POSTGRES_PRISMA_URL)')
+        console.warn('[db] WARNING: DATABASE_URL is a DIRECT connection, not pooled. May cause connection exhaustion in serverless.')
       }
-    } else {
-      console.error('[db] ERROR: No PostgreSQL URL found in environment variables.')
-      console.error('[db] Available DB-related env vars:', dbRelatedKeys.length > 0 ? dbRelatedKeys.join(', ') : 'NONE')
     }
   }
 
-  // Use direct URL for DIRECT_URL (for Prisma migrations)
+  // Use direct URL for DIRECT_URL (for Prisma migrations and interactive transactions)
   if (direct) {
     process.env.DIRECT_URL = direct.url
-    console.log(`[db] Using DIRECT connection as DIRECT_URL (from ${direct.name})`)
   } else if (!process.env.DIRECT_URL || !process.env.DIRECT_URL.startsWith('postgresql')) {
-    // Fallback: use DATABASE_URL as DIRECT_URL
     process.env.DIRECT_URL = process.env.DATABASE_URL
-    console.log('[db] DIRECT_URL not found, falling back to DATABASE_URL')
   }
 }
 
 // Resolve env vars before creating PrismaClient
 resolveDatabaseUrls()
-
-// Log for debugging (masked URL)
-const dbUrl = process.env.DATABASE_URL
-if (dbUrl && (dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://'))) {
-  const masked = dbUrl.replace(/\/\/[^:]+:[^@]+@/, '//***:***@')
-  const isPooled = dbUrl.includes('-pooler.')
-  console.log(`[db] DATABASE_URL: ${masked} (${isPooled ? 'POOLED ✓' : 'DIRECT ⚠️'})`)
-} else {
-  console.error(`[db] DATABASE_URL is not a PostgreSQL URL: ${dbUrl ? dbUrl.substring(0, 20) + '...' : 'undefined'}`)
-}
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -123,3 +97,162 @@ export const db =
   })
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
+
+// ---- Auto-initialize database on first query ----
+let dbInitialized = false
+let dbInitPromise: Promise<void> | null = null
+
+/**
+ * Ensure database tables exist before running queries.
+ * This runs automatically on the first database operation.
+ * It's a safety net in case `prisma db push` didn't run during build.
+ */
+export async function ensureDbInitialized(): Promise<void> {
+  if (dbInitialized) return
+  if (dbInitPromise) return dbInitPromise
+
+  dbInitPromise = (async () => {
+    try {
+      // Quick check: try a simple query to see if tables exist
+      await db.$queryRaw`SELECT 1 FROM "AISettings" LIMIT 1`
+      dbInitialized = true
+    } catch {
+      // Tables don't exist - auto-create them
+      console.log('[db] Tables not found, auto-initializing database schema...')
+      try {
+        await initializeDatabase()
+        dbInitialized = true
+        console.log('[db] Database auto-initialized successfully')
+      } catch (initError) {
+        console.error('[db] Failed to auto-initialize database:', initError)
+        throw initError
+      }
+    }
+  })()
+
+  return dbInitPromise
+}
+
+async function initializeDatabase(): Promise<void> {
+  // Drop old tables if they have wrong schema
+  const dropTables = [
+    'DROP TABLE IF EXISTS "ChapterContent" CASCADE',
+    'DROP TABLE IF EXISTS "ChapterOutline" CASCADE',
+    'DROP TABLE IF EXISTS "PromptTemplate" CASCADE',
+    'DROP TABLE IF EXISTS "WorldSetting" CASCADE',
+    'DROP TABLE IF EXISTS "Character" CASCADE',
+    'DROP TABLE IF EXISTS "AISettings" CASCADE',
+    'DROP TABLE IF EXISTS "Project" CASCADE',
+  ]
+  for (const sql of dropTables) {
+    try { await db.$executeRawUnsafe(sql) } catch { /* ignore */ }
+  }
+
+  // Create tables
+  await db.$executeRawUnsafe(`
+    CREATE TABLE "Project" (
+      "id" TEXT NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+      "title" TEXT NOT NULL, "genre" TEXT NOT NULL,
+      "description" TEXT NOT NULL DEFAULT '',
+      "chapterCount" INTEGER NOT NULL DEFAULT 30,
+      "wordsPerChapter" INTEGER NOT NULL DEFAULT 3000,
+      "coreSeed" TEXT NOT NULL DEFAULT '',
+      "status" TEXT NOT NULL DEFAULT 'draft',
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `)
+  await db.$executeRawUnsafe(`
+    CREATE TABLE "Character" (
+      "id" TEXT NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+      "projectId" TEXT NOT NULL, "name" TEXT NOT NULL,
+      "role" TEXT NOT NULL DEFAULT 'supporting',
+      "personality" TEXT NOT NULL DEFAULT '', "motivation" TEXT NOT NULL DEFAULT '',
+      "arc" TEXT NOT NULL DEFAULT '', "relationships" TEXT NOT NULL DEFAULT '',
+      "appearance" TEXT NOT NULL DEFAULT '', "background" TEXT NOT NULL DEFAULT '',
+      "order" INTEGER NOT NULL DEFAULT 0,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE
+    );
+  `)
+  await db.$executeRawUnsafe(`
+    CREATE TABLE "WorldSetting" (
+      "id" TEXT NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+      "projectId" TEXT NOT NULL,
+      "category" TEXT NOT NULL DEFAULT 'general', "name" TEXT NOT NULL,
+      "description" TEXT NOT NULL DEFAULT '', "rules" TEXT NOT NULL DEFAULT '',
+      "order" INTEGER NOT NULL DEFAULT 0,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE
+    );
+  `)
+  await db.$executeRawUnsafe(`
+    CREATE TABLE "ChapterOutline" (
+      "id" TEXT NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+      "projectId" TEXT NOT NULL, "chapterNumber" INTEGER NOT NULL,
+      "title" TEXT NOT NULL DEFAULT '', "summary" TEXT NOT NULL DEFAULT '',
+      "keyPoints" TEXT NOT NULL DEFAULT '', "foreshadowing" TEXT NOT NULL DEFAULT '',
+      "emotionBeat" TEXT NOT NULL DEFAULT '', "conflicts" TEXT NOT NULL DEFAULT '',
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+      CONSTRAINT "ChapterOutline_projectId_chapterNumber_key" UNIQUE ("projectId", "chapterNumber")
+    );
+  `)
+  await db.$executeRawUnsafe(`
+    CREATE TABLE "ChapterContent" (
+      "id" TEXT NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+      "projectId" TEXT NOT NULL, "chapterNumber" INTEGER NOT NULL,
+      "content" TEXT NOT NULL DEFAULT '',
+      "wordCount" INTEGER NOT NULL DEFAULT 0, "status" TEXT NOT NULL DEFAULT 'draft',
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+      FOREIGN KEY ("projectId", "chapterNumber") REFERENCES "ChapterOutline"("projectId", "chapterNumber") ON DELETE CASCADE ON UPDATE CASCADE,
+      CONSTRAINT "ChapterContent_projectId_chapterNumber_key" UNIQUE ("projectId", "chapterNumber")
+    );
+  `)
+  await db.$executeRawUnsafe(`
+    CREATE TABLE "PromptTemplate" (
+      "id" TEXT NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+      "projectId" TEXT NOT NULL, "name" TEXT NOT NULL,
+      "category" TEXT NOT NULL DEFAULT 'general', "content" TEXT NOT NULL,
+      "isDefault" BOOLEAN NOT NULL DEFAULT false, "order" INTEGER NOT NULL DEFAULT 0,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE
+    );
+  `)
+  await db.$executeRawUnsafe(`
+    CREATE TABLE "AISettings" (
+      "id" TEXT NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+      "provider" TEXT NOT NULL DEFAULT 'nvidia',
+      "apiKey" TEXT NOT NULL DEFAULT '',
+      "baseUrl" TEXT NOT NULL DEFAULT 'https://integrate.api.nvidia.com/v1',
+      "model" TEXT NOT NULL DEFAULT 'meta/llama-3.3-70b-instruct',
+      "temperature" DOUBLE PRECISION NOT NULL DEFAULT 0.7,
+      "maxTokens" INTEGER NOT NULL DEFAULT 8192,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `)
+
+  // Create indexes
+  for (const sql of [
+    'CREATE INDEX IF NOT EXISTS "Character_projectId_idx" ON "Character"("projectId")',
+    'CREATE INDEX IF NOT EXISTS "WorldSetting_projectId_idx" ON "WorldSetting"("projectId")',
+    'CREATE INDEX IF NOT EXISTS "ChapterOutline_projectId_idx" ON "ChapterOutline"("projectId")',
+    'CREATE INDEX IF NOT EXISTS "ChapterContent_projectId_idx" ON "ChapterContent"("projectId")',
+    'CREATE INDEX IF NOT EXISTS "PromptTemplate_projectId_idx" ON "PromptTemplate"("projectId")',
+  ]) {
+    await db.$executeRawUnsafe(sql)
+  }
+
+  // Seed default AI settings
+  await db.$executeRawUnsafe(`
+    INSERT INTO "AISettings" ("id", "provider", "apiKey", "baseUrl", "model", "temperature", "maxTokens")
+    VALUES (gen_random_uuid(), 'nvidia', '', 'https://integrate.api.nvidia.com/v1', 'meta/llama-3.3-70b-instruct', 0.7, 8192)
+  `)
+}

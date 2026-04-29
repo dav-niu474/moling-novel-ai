@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, ensureDbInitialized } from '@/lib/db';
 import { aiChat, parseAIJSON } from '@/lib/ai';
 import { outlinePrompt } from '@/lib/prompts';
 
@@ -12,6 +12,7 @@ export async function POST(
 ) {
   let projectId: string | undefined;
   try {
+    await ensureDbInitialized();
     const { id } = await params;
     projectId = id;
 

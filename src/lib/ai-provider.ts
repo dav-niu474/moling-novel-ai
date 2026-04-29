@@ -4,7 +4,7 @@
 // All external providers use OpenAI-compatible API format
 // ============================================================
 
-import { db } from './db';
+import { db, ensureDbInitialized } from './db';
 
 // Lazy import of z-ai-web-dev-sdk to avoid crashes during module loading
 type ZAIType = typeof import('z-ai-web-dev-sdk').default;
@@ -201,6 +201,7 @@ export interface AISettingsConfig {
 
 export async function getAISettings(): Promise<AISettingsConfig> {
   try {
+    await ensureDbInitialized()
     const settings = await db.aISettings.findFirst();
     if (settings) {
       return {
