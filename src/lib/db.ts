@@ -3,77 +3,99 @@ import { PrismaClient } from '@prisma/client'
 /**
  * Resolve database URLs for Prisma on Vercel + Neon PostgreSQL.
  *
- * On Vercel, the Neon PostgreSQL integration sets env vars like:
- *   - POSTGRES_PRISMA_URL (pooled, for runtime queries - has pgbouncer=true)
- *   - POSTGRES_URL_NON_POOLING (direct, for migrations)
- *   - POSTGRES_URL (standard connection)
- *   - Or with a store prefix: {STORE}_POSTGRES_PRISMA_URL
+ * Key insight: In Vercel serverless, we MUST use the POOLED connection URL
+ * for runtime queries (DATABASE_URL) because:
+ * - Serverless functions create many short-lived connections
+ * - Direct connections will exhaust the database's connection limit
+ * - The pooler endpoint (-pooler) handles connection reuse
  *
- * Prisma expects: DATABASE_URL (pooled) and DIRECT_URL (direct)
- * This module maps Neon's env vars to what Prisma expects.
+ * On Vercel, Neon sets env vars like:
+ *   - DATABASE_URL → direct (non-pooled) connection
+ *   - {STORE}_POSTGRES_PRISMA_URL → pooled connection (for Prisma runtime)
+ *   - {STORE}_POSTGRES_URL_NON_POOLING → direct connection (for migrations)
+ *   - {STORE}_DATABASE_URL_UNPOOLED → direct connection (alternative name)
+ *
+ * We need to swap:
+ *   DATABASE_URL = {STORE}_POSTGRES_PRISMA_URL (pooled, for runtime)
+ *   DIRECT_URL = {STORE}_POSTGRES_URL_NON_POOLING (direct, for migrations)
  */
 
-/**
- * Find the first PostgreSQL URL from a list of env var names
- */
-function findPostgresUrl(varNames: string[]): string | undefined {
+function findEnvUrl(varNames: string[]): { name: string; url: string } | undefined {
   for (const varName of varNames) {
     const value = process.env[varName]
     if (value && (value.startsWith('postgresql://') || value.startsWith('postgres://'))) {
-      return value
+      return { name: varName, url: value }
     }
   }
   return undefined
 }
 
 function resolveDatabaseUrls() {
-  // 1. If DATABASE_URL is already a PostgreSQL URL, it's properly configured
-  const currentDbUrl = process.env.DATABASE_URL
-  if (currentDbUrl && (currentDbUrl.startsWith('postgresql://') || currentDbUrl.startsWith('postgres://'))) {
-    // Ensure DIRECT_URL is also set (fallback to DATABASE_URL if not)
-    if (!process.env.DIRECT_URL) {
-      process.env.DIRECT_URL = process.env.DATABASE_URL
-    }
-    return
-  }
+  // Scan for all available Neon PostgreSQL URLs
+  const allEnvKeys = Object.keys(process.env)
+  const dbRelatedKeys = allEnvKeys.filter(
+    k => k.includes('POSTGRES') || k.includes('NEON') || k.includes('DATABASE')
+  )
 
-  // 2. Try Neon PostgreSQL env vars with various naming patterns
-  // Common Neon store prefixes (empty string = no prefix)
-  const storePrefixes = ['', 'NEON_', 'MOLING_', 'moling_']
+  // Find pooled connection URL (priority order)
+  const pooledResult = findEnvUrl([
+    'POSTGRES_PRISMA_URL',              // Neon standard (no prefix)
+    'moling_POSTGRES_PRISMA_URL',       // Neon with "moling" store prefix
+    'MOLING_POSTGRES_PRISMA_URL',       // Uppercase variant
+  ])
 
-  // Pooled connection candidates (for runtime queries)
-  const pooledVarNames: string[] = []
-  for (const prefix of storePrefixes) {
-    pooledVarNames.push(
-      `${prefix}POSTGRES_PRISMA_URL`,
-      `${prefix}POSTGRES_URL`,
-      `${prefix}DATABASE_URL`,
-    )
-  }
+  // Also search all env vars for any key containing "PRISMA_URL"
+  const pooledFromScan = !pooledResult
+    ? findEnvUrl(dbRelatedKeys.filter(k => k.includes('PRISMA')))
+    : null
 
-  // Direct connection candidates (for migrations)
-  const directVarNames: string[] = []
-  for (const prefix of storePrefixes) {
-    directVarNames.push(
-      `${prefix}POSTGRES_URL_NON_POOLING`,
-      `${prefix}POSTGRES_URL_UNPOOLED`,
-      `${prefix}DIRECT_URL`,
-    )
-  }
+  // Find direct (non-pooled) connection URL (priority order)
+  const directResult = findEnvUrl([
+    'POSTGRES_URL_NON_POOLING',         // Neon standard
+    'moling_POSTGRES_URL_NON_POOLING',  // Neon with "moling" store prefix
+    'MOLING_POSTGRES_URL_NON_POOLING',
+    'DATABASE_URL_UNPOOLED',            // Alternative naming
+    'moling_DATABASE_URL_UNPOOLED',
+    'MOLING_DATABASE_URL_UNPOOLED',
+  ])
 
-  const pooledUrl = findPostgresUrl(pooledVarNames)
-  const directUrl = findPostgresUrl(directVarNames)
+  // Also search all env vars for any key containing "NON_POOLING" or "UNPOOLED"
+  const directFromScan = !directResult
+    ? findEnvUrl(dbRelatedKeys.filter(k => k.includes('NON_POOLING') || k.includes('UNPOOLED')))
+    : null
 
-  if (pooledUrl) {
-    process.env.DATABASE_URL = pooledUrl
-    process.env.DIRECT_URL = directUrl || pooledUrl
+  // Use pooled URL for DATABASE_URL (critical for Vercel serverless)
+  const pooled = pooledResult || pooledFromScan
+  const direct = directResult || directFromScan
+
+  if (pooled) {
+    process.env.DATABASE_URL = pooled.url
+    console.log(`[db] Using POOLED connection as DATABASE_URL (from ${pooled.name})`)
   } else {
-    // No PostgreSQL URL found - log available env vars for debugging
-    const availableDbVars = Object.keys(process.env).filter(
-      k => k.includes('POSTGRES') || k.includes('NEON') || k.includes('DATABASE')
-    )
-    console.error('[db] ERROR: No PostgreSQL URL found in environment variables.')
-    console.error('[db] Available DB-related env vars:', availableDbVars.length > 0 ? availableDbVars.join(', ') : 'NONE')
+    // Fallback: check if current DATABASE_URL is already a PostgreSQL URL
+    const currentUrl = process.env.DATABASE_URL
+    if (currentUrl && (currentUrl.startsWith('postgresql://') || currentUrl.startsWith('postgres://'))) {
+      // Check if it's a pooler URL (contains "pooler" in hostname)
+      const isPooled = currentUrl.includes('-pooler.')
+      if (!isPooled) {
+        console.warn('[db] WARNING: DATABASE_URL is a DIRECT connection, not pooled.')
+        console.warn('[db] This may cause connection exhaustion in serverless environments.')
+        console.warn('[db] Please set a pooled connection URL (e.g., POSTGRES_PRISMA_URL)')
+      }
+    } else {
+      console.error('[db] ERROR: No PostgreSQL URL found in environment variables.')
+      console.error('[db] Available DB-related env vars:', dbRelatedKeys.length > 0 ? dbRelatedKeys.join(', ') : 'NONE')
+    }
+  }
+
+  // Use direct URL for DIRECT_URL (for Prisma migrations)
+  if (direct) {
+    process.env.DIRECT_URL = direct.url
+    console.log(`[db] Using DIRECT connection as DIRECT_URL (from ${direct.name})`)
+  } else if (!process.env.DIRECT_URL || !process.env.DIRECT_URL.startsWith('postgresql')) {
+    // Fallback: use DATABASE_URL as DIRECT_URL
+    process.env.DIRECT_URL = process.env.DATABASE_URL
+    console.log('[db] DIRECT_URL not found, falling back to DATABASE_URL')
   }
 }
 
@@ -84,7 +106,8 @@ resolveDatabaseUrls()
 const dbUrl = process.env.DATABASE_URL
 if (dbUrl && (dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://'))) {
   const masked = dbUrl.replace(/\/\/[^:]+:[^@]+@/, '//***:***@')
-  console.log(`[db] DATABASE_URL: ${masked}`)
+  const isPooled = dbUrl.includes('-pooler.')
+  console.log(`[db] DATABASE_URL: ${masked} (${isPooled ? 'POOLED ✓' : 'DIRECT ⚠️'})`)
 } else {
   console.error(`[db] DATABASE_URL is not a PostgreSQL URL: ${dbUrl ? dbUrl.substring(0, 20) + '...' : 'undefined'}`)
 }
