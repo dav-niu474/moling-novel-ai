@@ -14,14 +14,26 @@ export async function POST() {
     await db.$queryRaw`SELECT 1`
     console.log('[setup] Database connection successful')
 
-    // Drop existing tables that might conflict (from old schema)
-    // Drop in reverse dependency order
+    // Drop ALL existing tables that might conflict (including old schema tables)
+    // Must drop in reverse dependency order
     const dropTables = [
       'DROP TABLE IF EXISTS "ChapterContent" CASCADE',
       'DROP TABLE IF EXISTS "ChapterOutline" CASCADE',
       'DROP TABLE IF EXISTS "PromptTemplate" CASCADE',
       'DROP TABLE IF EXISTS "WorldSetting" CASCADE',
       'DROP TABLE IF EXISTS "Character" CASCADE',
+      'DROP TABLE IF EXISTS "Comment" CASCADE',
+      'DROP TABLE IF EXISTS "Issue" CASCADE',
+      'DROP TABLE IF EXISTS "AgentTask" CASCADE',
+      'DROP TABLE IF EXISTS "AgentSkill" CASCADE',
+      'DROP TABLE IF EXISTS "Skill" CASCADE',
+      'DROP TABLE IF EXISTS "Agent" CASCADE',
+      'DROP TABLE IF EXISTS "ChatMessage" CASCADE',
+      'DROP TABLE IF EXISTS "ChatSession" CASCADE',
+      'DROP TABLE IF EXISTS "ActivityLog" CASCADE',
+      'DROP TABLE IF EXISTS "Member" CASCADE',
+      'DROP TABLE IF EXISTS "User" CASCADE',
+      'DROP TABLE IF EXISTS "Workspace" CASCADE',
       'DROP TABLE IF EXISTS "AISettings" CASCADE',
       'DROP TABLE IF EXISTS "Project" CASCADE',
     ]
@@ -35,7 +47,7 @@ export async function POST() {
     }
     console.log('[setup] Cleaned up old tables')
 
-    // Create tables in dependency order
+    // Create tables in dependency order - MUST match prisma/schema.prisma exactly
     console.log('[setup] Creating database tables...')
 
     await db.$executeRawUnsafe(`
@@ -47,6 +59,7 @@ export async function POST() {
         "chapterCount" INTEGER NOT NULL DEFAULT 30,
         "wordsPerChapter" INTEGER NOT NULL DEFAULT 3000,
         "coreSeed" TEXT NOT NULL DEFAULT '',
+        "plotStructure" TEXT NOT NULL DEFAULT '',
         "status" TEXT NOT NULL DEFAULT 'draft',
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -206,7 +219,7 @@ export async function GET() {
     const requiredTables = ['Project', 'Character', 'WorldSetting', 'ChapterOutline', 'ChapterContent', 'PromptTemplate', 'AISettings']
     const missingTables = requiredTables.filter(t => !tableNames.includes(t))
 
-    // Check Project table schema
+    // Check Project table schema has all required columns including plotStructure
     let projectSchemaOk = false
     if (tableNames.includes('Project')) {
       try {
@@ -216,7 +229,10 @@ export async function GET() {
           ORDER BY ordinal_position;
         `) as Array<{ column_name: string }>
         const columnNames = columns.map(c => c.column_name)
-        projectSchemaOk = columnNames.includes('title') && columnNames.includes('genre')
+        projectSchemaOk = columnNames.includes('title')
+          && columnNames.includes('genre')
+          && columnNames.includes('coreSeed')
+          && columnNames.includes('plotStructure')
       } catch {
         // Ignore
       }

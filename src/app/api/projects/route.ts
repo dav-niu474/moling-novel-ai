@@ -20,7 +20,7 @@ export async function GET() {
     console.error('Failed to fetch projects:', error)
     return NextResponse.json({
       error: 'Failed to fetch projects',
-      details: process.env.NODE_ENV === 'production' ? undefined : error?.message,
+      details: error?.message,
     }, { status: 500 })
   }
 }
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     console.error('Failed to create project:', error)
     return NextResponse.json({
       error: 'Failed to create project',
-      details: process.env.NODE_ENV === 'production' ? undefined : error?.message,
+      details: error?.message,
     }, { status: 500 })
   }
 }
