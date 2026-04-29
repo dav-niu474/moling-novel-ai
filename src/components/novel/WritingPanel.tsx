@@ -151,27 +151,79 @@ export function WritingPanel({ projectId, chapterCount }: WritingPanelProps) {
 
     try {
       setRefining(true)
-      const res = await fetch('/api/chapter-contents/refine', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, chapterNumber: selectedChapter, action, content: textContent }),
-      })
 
-      if (res.ok) {
-        const data = await res.json()
-        if (data.content) {
-          setTextContent(data.content)
-          updateChapterState(selectedChapter, data.content, action === 'polish' ? 'polished' : undefined)
-          toast.success('处理完成')
+      if (action === 'check') {
+        // Use the dedicated consistency check endpoint
+        const res = await fetch(`/api/projects/${projectId}/check`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chapterNumber: selectedChapter, content: textContent }),
+        })
+
+        if (res.ok) {
+          const data = await res.json()
+          if (data.success && data.data) {
+            const { issues, totalIssues, highSeverity, mediumSeverity, lowSeverity } = data.data
+            if (totalIssues === 0) {
+              toast.success('一致性检查完成：未发现问题 ✓')
+            } else {
+              // Display issues in a user-friendly format
+              const issueList = issues.map((issue: any, i: number) => {
+                const severityIcon = issue.severity === 'high' ? '🔴' : issue.severity === 'medium' ? '🟡' : '🟢'
+                return `${severityIcon} ${issue.description}\n   💡 ${issue.suggestion}`
+              }).join('\n\n')
+              toast[highSeverity > 0 ? 'error' : 'warning'](
+                `发现 ${totalIssues} 个问题（高${highSeverity} 中${mediumSeverity} 低${lowSeverity}）`,
+                { description: issueList, duration: 8000 }
+              )
+            }
+          } else {
+            toast.error('一致性检查结果格式异常')
+          }
         } else {
-          toast.error('处理结果格式异常')
+          const errorData = await res.json().catch(() => null)
+          toast.error(errorData?.error || '一致性检查失败，请稍后重试')
         }
       } else {
-        const errorData = await res.json().catch(() => null)
-        toast.error(errorData?.error || '文本处理失败，请稍后重试')
+        // Use the refine endpoint for other actions
+        const res = await fetch('/api/chapter-contents/refine', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId, chapterNumber: selectedChapter, action, content: textContent }),
+        })
+
+        if (res.ok) {
+          const data = await res.json()
+          if (data.content) {
+            setTextContent(data.content)
+            updateChapterState(selectedChapter, data.content, action === 'polish' ? 'polished' : undefined)
+            // Auto-save refined content to DB
+            try {
+              await fetch('/api/chapter-contents', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  projectId,
+                  chapterNumber: selectedChapter,
+                  content: data.content,
+                  wordCount: data.content.length,
+                }),
+              })
+            } catch {
+              // Auto-save failed silently — user can still manually save
+              console.warn('Auto-save after refine failed')
+            }
+            toast.success('处理完成（已自动保存）')
+          } else {
+            toast.error('处理结果格式异常')
+          }
+        } else {
+          const errorData = await res.json().catch(() => null)
+          toast.error(errorData?.error || '文本处理失败，请稍后重试')
+        }
       }
     } catch {
-      toast.error('文本处理失败，请检查网络连接后重试')
+      toast.error('处理失败，请检查网络连接后重试')
     } finally {
       setRefining(false)
     }

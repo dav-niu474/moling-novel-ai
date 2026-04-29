@@ -101,6 +101,9 @@ export async function POST(request: Request) {
               where: { id: projectId! },
               data: {
                 coreSeed: architecture.coreSeed || coreSeed,
+                plotStructure: architecture.plotStructure
+                  ? JSON.stringify(architecture.plotStructure)
+                  : '',
                 status: 'architecting',
               },
             })

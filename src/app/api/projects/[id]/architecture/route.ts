@@ -90,11 +90,14 @@ export async function POST(
 
     // Save to database in a transaction
     await db.$transaction(async (tx) => {
-      // Update project core seed and status
+      // Update project core seed, plot structure and status
       await tx.project.update({
         where: { id },
         data: {
           coreSeed: architecture.coreSeed,
+          plotStructure: architecture.plotStructure
+            ? JSON.stringify(architecture.plotStructure)
+            : '',
           status: 'architecting',
         },
       });

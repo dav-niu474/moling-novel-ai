@@ -38,7 +38,7 @@ export async function PATCH(
     const body = await request.json()
 
     // Whitelist allowed fields to prevent arbitrary field updates
-    const { title, genre, description, chapterCount, wordsPerChapter, coreSeed, status } = body
+    const { title, genre, description, chapterCount, wordsPerChapter, coreSeed, plotStructure, status } = body
     const dataToUpdate: Record<string, unknown> = {}
     if (title !== undefined) dataToUpdate.title = title
     if (genre !== undefined) dataToUpdate.genre = genre
@@ -46,6 +46,7 @@ export async function PATCH(
     if (chapterCount !== undefined) dataToUpdate.chapterCount = chapterCount
     if (wordsPerChapter !== undefined) dataToUpdate.wordsPerChapter = wordsPerChapter
     if (coreSeed !== undefined) dataToUpdate.coreSeed = coreSeed
+    if (plotStructure !== undefined) dataToUpdate.plotStructure = plotStructure
     if (status !== undefined) dataToUpdate.status = status
 
     const project = await db.project.update({

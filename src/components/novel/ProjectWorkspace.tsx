@@ -24,6 +24,7 @@ interface Project {
   chapterCount: number
   wordsPerChapter: number
   coreSeed: string
+  plotStructure: string
   status: string
   createdAt: string
   updatedAt: string

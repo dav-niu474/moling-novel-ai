@@ -115,6 +115,8 @@ export async function ensureDbInitialized(): Promise<void> {
     try {
       // Quick check: try a simple query to see if tables exist
       await db.$queryRaw`SELECT 1 FROM "AISettings" LIMIT 1`
+      // Tables exist — ensure schema is up-to-date
+      await migrateSchema()
       dbInitialized = true
     } catch {
       // Tables don't exist - auto-create them
@@ -131,6 +133,27 @@ export async function ensureDbInitialized(): Promise<void> {
   })()
 
   return dbInitPromise
+}
+
+/**
+ * Run lightweight schema migrations for existing databases.
+ * This ensures new columns are added without dropping data.
+ */
+async function migrateSchema(): Promise<void> {
+  try {
+    // Check if plotStructure column exists on Project table
+    const columns = await db.$queryRaw<Array<{ column_name: string }>>`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'Project' AND column_name = 'plotStructure'
+    `
+    if (columns.length === 0) {
+      console.log('[db] Adding plotStructure column to Project table...')
+      await db.$executeRawUnsafe(`ALTER TABLE "Project" ADD COLUMN "plotStructure" TEXT NOT NULL DEFAULT ''`)
+      console.log('[db] plotStructure column added successfully')
+    }
+  } catch (err) {
+    console.warn('[db] Schema migration check failed (non-critical):', err)
+  }
 }
 
 async function initializeDatabase(): Promise<void> {
@@ -157,6 +180,7 @@ async function initializeDatabase(): Promise<void> {
       "chapterCount" INTEGER NOT NULL DEFAULT 30,
       "wordsPerChapter" INTEGER NOT NULL DEFAULT 3000,
       "coreSeed" TEXT NOT NULL DEFAULT '',
+      "plotStructure" TEXT NOT NULL DEFAULT '',
       "status" TEXT NOT NULL DEFAULT 'draft',
       "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
       "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP

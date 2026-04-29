@@ -42,6 +42,26 @@ export async function POST(
       .map((ws) => `${ws.name}（${ws.category}）：${ws.description}`)
       .join('\n');
 
+    // Parse plotStructure from stored JSON
+    let plotStructureText = `架构核心种子：${project.coreSeed}`;
+    if (project.plotStructure) {
+      try {
+        const ps = JSON.parse(project.plotStructure);
+        if (ps && typeof ps === 'object') {
+          plotStructureText = [
+            ps.setup ? `开局设定：${ps.setup}` : '',
+            ps.risingAction ? `上升行动：${ps.risingAction}` : '',
+            ps.midpoint ? `中点转折：${ps.midpoint}` : '',
+            ps.fallingAction ? `下降行动：${ps.fallingAction}` : '',
+            ps.climax ? `高潮：${ps.climax}` : '',
+            ps.resolution ? `结局：${ps.resolution}` : '',
+          ].filter(Boolean).join('\n');
+        }
+      } catch {
+        plotStructureText = project.plotStructure;
+      }
+    }
+
     const effectiveChapterCount = Math.min(project.chapterCount, 10);
     const outlineMaxTokens = Math.min(Math.max(effectiveChapterCount * 500, 4096), 16384);
 
@@ -53,7 +73,7 @@ export async function POST(
       coreSeed: project.coreSeed,
       characters: charactersSummary || '暂无角色信息',
       worldSettings: worldSettingsSummary || '暂无世界设定',
-      plotStructure: `架构核心种子：${project.coreSeed}`,
+      plotStructure: plotStructureText,
     });
 
     const stream = await aiChatStream([

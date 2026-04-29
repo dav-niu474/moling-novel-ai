@@ -67,9 +67,35 @@ export function OutlinePanel({ projectId, chapterCount }: OutlinePanelProps) {
         body: JSON.stringify({ projectId }),
       })
       if (res.ok) {
-        const data = await res.json()
-        setOutlines(data)
-        toast.success(`生成了 ${data.length} 章大纲`)
+        // The API returns a streaming text/plain response, not JSON
+        const contentType = res.headers.get('Content-Type') || ''
+        if (contentType.includes('text/plain')) {
+          // Read the streaming response and collect full text
+          setGenerateProgress('AI正在生成大纲...')
+          const reader = res.body?.getReader()
+          if (reader) {
+            const decoder = new TextDecoder()
+            let fullText = ''
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) break
+              fullText += decoder.decode(value, { stream: true })
+              setGenerateProgress(`AI正在生成大纲... (${fullText.length} 字)`)
+            }
+            // Streaming is done; outlines are saved to DB by the server
+            // Just re-fetch outlines from DB
+            setGenerateProgress('大纲已生成，正在加载...')
+            await fetchOutlines()
+            toast.success('大纲生成完成')
+          } else {
+            toast.error('无法读取流数据')
+          }
+        } else {
+          // Non-streaming JSON response (backward compatibility)
+          const data = await res.json()
+          setOutlines(data)
+          toast.success(`生成了 ${data.length} 章大纲`)
+        }
       } else {
         const errorData = await res.json().catch(() => null)
         toast.error(errorData?.error || '大纲生成失败，请稍后重试')

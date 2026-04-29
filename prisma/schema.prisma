@@ -16,7 +16,8 @@ model Project {
   chapterCount   Int      @default(30)
   wordsPerChapter Int     @default(3000)
   coreSeed       String   @default("")
-  status         String   @default("draft") // draft, architecting, outlining, writing, completed
+  plotStructure  String   @default("") // JSON: {setup, risingAction, midpoint, fallingAction, climax, resolution}
+  status         String   @default("draft") // draft, architecting, outlined, writing, completed
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

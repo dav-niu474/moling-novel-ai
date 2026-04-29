@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Sparkles, Loader2, BookOpen, Users, Globe, GitBranch } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,7 @@ interface ArchitecturePanelProps {
     chapterCount: number
     wordsPerChapter: number
     coreSeed: string
+    plotStructure: string
     status: string
   }
 }
@@ -37,6 +38,88 @@ export function ArchitecturePanel({ projectId, project }: ArchitecturePanelProps
   const [architecture, setArchitecture] = useState<ArchitectureData | null>(null)
   const [generating, setGenerating] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [loadingSaved, setLoadingSaved] = useState(true)
+
+  // Load saved architecture data from DB on mount
+  useEffect(() => {
+    loadSavedArchitecture()
+  }, [projectId])
+
+  const loadSavedArchitecture = async () => {
+    try {
+      setLoadingSaved(true)
+      // Fetch characters and world settings from DB
+      const [charsRes, wsRes] = await Promise.all([
+        fetch(`/api/characters?projectId=${projectId}`),
+        fetch(`/api/world-settings?projectId=${projectId}`),
+      ])
+
+      const characters = charsRes.ok ? await charsRes.json() : []
+      const worldSettings = wsRes.ok ? await wsRes.json() : []
+
+      // Check if we have saved data to reconstruct architecture
+      const hasCoreSeed = project.coreSeed && project.coreSeed.trim()
+      const hasPlotStructure = project.plotStructure && project.plotStructure.trim()
+      const hasCharacters = characters.length > 0
+      const hasWorldSettings = worldSettings.length > 0
+
+      if (hasCoreSeed || hasPlotStructure || hasCharacters || hasWorldSettings) {
+        // Reconstruct architecture display from saved data
+        const characterDynamics = characters
+          .map((c: any) => `${c.name}（${c.role}）：${c.personality} | 动机：${c.motivation} | 弧线：${c.arc}`)
+          .join('\n')
+
+        const worldviewFramework = worldSettings
+          .map((ws: any) => `${ws.name}（${ws.category}）：${ws.description}`)
+          .join('\n')
+
+        let plotArchitecture = ''
+        if (hasPlotStructure) {
+          try {
+            const ps = JSON.parse(project.plotStructure)
+            if (ps && typeof ps === 'object') {
+              const chapterCount = project.chapterCount
+              plotArchitecture = [
+                ps.setup ? `开局设定（前${Math.floor(chapterCount * 0.1)}章）：${ps.setup}` : '',
+                ps.risingAction ? `上升行动（第${Math.floor(chapterCount * 0.1) + 1}-${Math.floor(chapterCount * 0.5)}章）：${ps.risingAction}` : '',
+                ps.midpoint ? `中点转折（约第${Math.floor(chapterCount * 0.5)}章）：${ps.midpoint}` : '',
+                ps.fallingAction ? `下降行动（第${Math.floor(chapterCount * 0.5) + 1}-${Math.floor(chapterCount * 0.8)}章）：${ps.fallingAction}` : '',
+                ps.climax ? `高潮（第${Math.floor(chapterCount * 0.8) + 1}-${Math.floor(chapterCount * 0.9)}章）：${ps.climax}` : '',
+                ps.resolution ? `结局（第${Math.floor(chapterCount * 0.9) + 1}-${chapterCount}章）：${ps.resolution}` : '',
+              ].filter(Boolean).join('\n')
+            }
+          } catch {
+            plotArchitecture = project.plotStructure
+          }
+        }
+
+        if (characterDynamics || worldviewFramework || plotArchitecture) {
+          const rhythmPoints = [
+            { chapter: 1, intensity: 60, label: '开篇引入' },
+            { chapter: Math.floor(project.chapterCount * 0.1), intensity: 70, label: '初遇挑战' },
+            { chapter: Math.floor(project.chapterCount * 0.25), intensity: 75, label: '冲突升级' },
+            { chapter: Math.floor(project.chapterCount * 0.5), intensity: 90, label: '中点转折' },
+            { chapter: Math.floor(project.chapterCount * 0.65), intensity: 70, label: '低谷蓄力' },
+            { chapter: Math.floor(project.chapterCount * 0.8), intensity: 85, label: '二次冲突' },
+            { chapter: Math.floor(project.chapterCount * 0.9), intensity: 95, label: '高潮预演' },
+            { chapter: project.chapterCount, intensity: 100, label: '最终高潮' },
+          ]
+
+          setArchitecture({
+            coreSeed: project.coreSeed,
+            characterDynamics,
+            worldviewFramework,
+            plotArchitecture,
+            rhythmPoints,
+          })
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load saved architecture:', err)
+    } finally {
+      setLoadingSaved(false)
+    }
+  }
 
   const handleGenerate = async () => {
     if (!coreSeed.trim()) {
