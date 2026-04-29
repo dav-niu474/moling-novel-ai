@@ -67,34 +67,18 @@ export function OutlinePanel({ projectId, chapterCount }: OutlinePanelProps) {
         body: JSON.stringify({ projectId }),
       })
       if (res.ok) {
-        // The API returns a streaming text/plain response, not JSON
-        const contentType = res.headers.get('Content-Type') || ''
-        if (contentType.includes('text/plain')) {
-          // Read the streaming response and collect full text
-          setGenerateProgress('AI正在生成大纲...')
-          const reader = res.body?.getReader()
-          if (reader) {
-            const decoder = new TextDecoder()
-            let fullText = ''
-            while (true) {
-              const { done, value } = await reader.read()
-              if (done) break
-              fullText += decoder.decode(value, { stream: true })
-              setGenerateProgress(`AI正在生成大纲... (${fullText.length} 字)`)
-            }
-            // Streaming is done; outlines are saved to DB by the server
-            // Just re-fetch outlines from DB
-            setGenerateProgress('大纲已生成，正在加载...')
-            await fetchOutlines()
-            toast.success('大纲生成完成')
-          } else {
-            toast.error('无法读取流数据')
-          }
-        } else {
-          // Non-streaming JSON response (backward compatibility)
-          const data = await res.json()
+        // API now returns JSON array of saved outlines
+        setGenerateProgress('正在解析大纲...')
+        const data = await res.json()
+        if (Array.isArray(data)) {
           setOutlines(data)
           toast.success(`生成了 ${data.length} 章大纲`)
+        } else if (data.error) {
+          toast.error(data.error)
+        } else {
+          // Fallback: re-fetch outlines from DB
+          await fetchOutlines()
+          toast.success('大纲生成完成')
         }
       } else {
         const errorData = await res.json().catch(() => null)

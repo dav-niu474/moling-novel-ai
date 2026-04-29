@@ -1,13 +1,13 @@
 import { db, ensureDbInitialized } from '@/lib/db'
-import { aiChatStream, createStreamingResponse, parseAIJSON } from '@/lib/ai'
+import { aiChatStreamCollect, parseAIJSON } from '@/lib/ai'
 import { outlinePrompt } from '@/lib/prompts'
 import { NextResponse } from 'next/server'
 
 export const maxDuration = 60;
 
-// POST /api/chapter-outlines/generate - Generate chapter outlines using AI (streaming)
-// Returns a streaming response to keep Vercel function alive during AI generation
-// Saves outlines to DB after stream completes
+// POST /api/chapter-outlines/generate - Generate chapter outlines using AI
+// Uses aiChatStreamCollect to collect full response before saving,
+// which is more reliable than TransformStream flush on Vercel Serverless
 export async function POST(request: Request) {
   let projectId: string | undefined
   try {
@@ -86,7 +86,8 @@ export async function POST(request: Request) {
       plotStructure: plotStructureText,
     })
 
-    const stream = await aiChatStream(
+    // Collect full response from AI (streaming internally to avoid timeout)
+    const fullContent = await aiChatStreamCollect(
       [
         { role: 'system', content: prompts.system },
         { role: 'user', content: prompts.user },
@@ -94,73 +95,51 @@ export async function POST(request: Request) {
       { maxTokens: outlineMaxTokens }
     )
 
-    // Return streaming response - this keeps Vercel function alive
-    const readableStream = createStreamingResponse(stream)
+    // Parse the AI response
+    let outlines
+    try {
+      outlines = parseAIJSON<Array<{
+        chapterNumber: number; title: string; summary: string;
+        keyPoints: string[] | string; foreshadowing: string[] | string;
+        emotionBeat: string; conflicts: Array<{ type: string; description: string }> | string;
+      }>>(fullContent)
+    } catch {
+      await db.project.update({ where: { id: projectId }, data: { status: 'architecting' } })
+      return NextResponse.json({ error: '大纲格式解析失败，请重试' }, { status: 500 })
+    }
 
-    // Collect content and save to DB after stream completes
-    let fullContent = ''
-    const savedProjectId = projectId
-    const transformStream = new TransformStream({
-      transform(chunk, controller) {
-        const text = new TextDecoder().decode(chunk)
-        fullContent += text
-        controller.enqueue(chunk)
-      },
-      async flush() {
-        // Save to DB after streaming completes
-        // The function is still alive because streaming response kept it alive
-        try {
-          let outlines
-          try {
-            outlines = parseAIJSON<Array<{
-              chapterNumber: number; title: string; summary: string;
-              keyPoints: string[] | string; foreshadowing: string[] | string;
-              emotionBeat: string; conflicts: Array<{ type: string; description: string }> | string;
-            }>>(fullContent)
-          } catch {
-            await db.project.update({ where: { id: savedProjectId }, data: { status: 'architecting' } })
-            return
-          }
+    if (!Array.isArray(outlines) || outlines.length === 0) {
+      await db.project.update({ where: { id: projectId }, data: { status: 'architecting' } })
+      return NextResponse.json({ error: '生成的大纲为空，请重试' }, { status: 500 })
+    }
 
-          if (!Array.isArray(outlines) || outlines.length === 0) {
-            await db.project.update({ where: { id: savedProjectId }, data: { status: 'architecting' } })
-            return
-          }
-
-          await db.$transaction(async (tx) => {
-            await tx.chapterOutline.deleteMany({ where: { projectId: savedProjectId } })
-            for (const outline of outlines) {
-              await tx.chapterOutline.create({
-                data: {
-                  projectId: savedProjectId,
-                  chapterNumber: outline.chapterNumber,
-                  title: outline.title || `第${outline.chapterNumber}章`,
-                  summary: outline.summary || '',
-                  keyPoints: typeof outline.keyPoints === 'string' ? outline.keyPoints : JSON.stringify(outline.keyPoints || []),
-                  foreshadowing: typeof outline.foreshadowing === 'string' ? outline.foreshadowing : JSON.stringify(outline.foreshadowing || []),
-                  emotionBeat: outline.emotionBeat || '',
-                  conflicts: typeof outline.conflicts === 'string' ? outline.conflicts : JSON.stringify(outline.conflicts || []),
-                },
-              })
-            }
-            await tx.project.update({ where: { id: savedProjectId }, data: { status: 'outlining' } })
-          })
-        } catch (err) {
-          console.error('Failed to save outlines:', err)
-          try { await db.project.update({ where: { id: savedProjectId }, data: { status: 'architecting' } }) } catch {}
-        }
-      },
+    // Save to database
+    await db.$transaction(async (tx) => {
+      await tx.chapterOutline.deleteMany({ where: { projectId: projectId! } })
+      for (const outline of outlines) {
+        await tx.chapterOutline.create({
+          data: {
+            projectId: projectId!,
+            chapterNumber: outline.chapterNumber,
+            title: outline.title || `第${outline.chapterNumber}章`,
+            summary: outline.summary || '',
+            keyPoints: typeof outline.keyPoints === 'string' ? outline.keyPoints : JSON.stringify(outline.keyPoints || []),
+            foreshadowing: typeof outline.foreshadowing === 'string' ? outline.foreshadowing : JSON.stringify(outline.foreshadowing || []),
+            emotionBeat: outline.emotionBeat || '',
+            conflicts: typeof outline.conflicts === 'string' ? outline.conflicts : JSON.stringify(outline.conflicts || []),
+          },
+        })
+      }
+      await tx.project.update({ where: { id: projectId! }, data: { status: 'outlining' } })
     })
 
-    const finalStream = readableStream.pipeThrough(transformStream)
-
-    return new Response(finalStream, {
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Transfer-Encoding': 'chunked',
-        'Cache-Control': 'no-cache',
-      },
+    // Return saved outlines
+    const savedOutlines = await db.chapterOutline.findMany({
+      where: { projectId },
+      orderBy: { chapterNumber: 'asc' },
     })
+
+    return NextResponse.json(savedOutlines)
   } catch (error) {
     console.error('Outline generation failed:', error)
     if (projectId) {

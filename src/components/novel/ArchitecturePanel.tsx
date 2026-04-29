@@ -129,7 +129,7 @@ export function ArchitecturePanel({ projectId, project }: ArchitecturePanelProps
 
     try {
       setGenerating(true)
-      setProgress(0)
+      setProgress(10)
 
       // Save coreSeed first
       await fetch(`/api/projects/${projectId}`, {
@@ -138,6 +138,8 @@ export function ArchitecturePanel({ projectId, project }: ArchitecturePanelProps
         body: JSON.stringify({ coreSeed }),
       })
 
+      setProgress(20)
+
       // Progress indicator for AI generation
       const progressInterval = setInterval(() => {
         setProgress((prev) => {
@@ -145,9 +147,9 @@ export function ArchitecturePanel({ projectId, project }: ArchitecturePanelProps
             clearInterval(progressInterval)
             return 90
           }
-          return prev + Math.random() * 10
+          return prev + Math.random() * 5
         })
-      }, 800)
+      }, 1000)
 
       const res = await fetch('/api/architecture/generate', {
         method: 'POST',
@@ -155,112 +157,67 @@ export function ArchitecturePanel({ projectId, project }: ArchitecturePanelProps
         body: JSON.stringify({ projectId, coreSeed }),
       })
 
+      clearInterval(progressInterval)
+
       if (!res.ok) {
-        clearInterval(progressInterval)
         const errorData = await res.json().catch(() => null)
         toast.error(errorData?.error || '架构生成失败，请稍后重试')
         return
       }
 
-      // Handle streaming response
-      const contentType = res.headers.get('Content-Type') || ''
-      const chapterCount = Number(res.headers.get('X-Architecture-ChapterCount') || project.chapterCount)
+      setProgress(95)
+      const data = await res.json()
 
-      if (contentType.includes('text/plain')) {
-        // Streaming response - collect full text and parse
-        const reader = res.body?.getReader()
-        if (!reader) {
-          toast.error('架构生成失败：无法读取流')
-          return
-        }
+      if (data.success && data.data) {
+        const { coreSeed: aiCoreSeed, plotStructure: aiPlotStructure, characters: aiCharacters, worldSettings: aiWorldSettings } = data.data
 
-        const decoder = new TextDecoder()
-        let fullText = ''
+        // Build architecture display
+        const characterDynamics = aiCharacters
+          ? aiCharacters
+              .map((c: any) => `${c.name}（${c.role}）：${c.personality} | 动机：${c.motivation} | 弧线：${c.arc}`)
+              .join('\n')
+          : ''
 
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          fullText += decoder.decode(value, { stream: true })
-          // Update progress based on content length
-          setProgress(Math.min(50 + fullText.length / 50, 95))
-        }
+        const worldviewFramework = aiWorldSettings
+          ? aiWorldSettings
+              .map((ws: any) => `${ws.name}（${ws.category}）：${ws.description}`)
+              .join('\n')
+          : ''
 
-        clearInterval(progressInterval)
+        const chapterCount = project.chapterCount
+        const plotArchitecture = aiPlotStructure
+          ? `开局设定（前${Math.floor(chapterCount * 0.1)}章）：${aiPlotStructure.setup}\n` +
+            `上升行动（第${Math.floor(chapterCount * 0.1) + 1}-${Math.floor(chapterCount * 0.5)}章）：${aiPlotStructure.risingAction}\n` +
+            `中点转折（约第${Math.floor(chapterCount * 0.5)}章）：${aiPlotStructure.midpoint}\n` +
+            `下降行动（第${Math.floor(chapterCount * 0.5) + 1}-${Math.floor(chapterCount * 0.8)}章）：${aiPlotStructure.fallingAction}\n` +
+            `高潮（第${Math.floor(chapterCount * 0.8) + 1}-${Math.floor(chapterCount * 0.9)}章）：${aiPlotStructure.climax}\n` +
+            `结局（第${Math.floor(chapterCount * 0.9) + 1}-${chapterCount}章）：${aiPlotStructure.resolution}`
+          : ''
+
+        const rhythmPoints = [
+          { chapter: 1, intensity: 60, label: '开篇引入' },
+          { chapter: Math.floor(chapterCount * 0.1), intensity: 70, label: '初遇挑战' },
+          { chapter: Math.floor(chapterCount * 0.25), intensity: 75, label: '冲突升级' },
+          { chapter: Math.floor(chapterCount * 0.5), intensity: 90, label: '中点转折' },
+          { chapter: Math.floor(chapterCount * 0.65), intensity: 70, label: '低谷蓄力' },
+          { chapter: Math.floor(chapterCount * 0.8), intensity: 85, label: '二次冲突' },
+          { chapter: Math.floor(chapterCount * 0.9), intensity: 95, label: '高潮预演' },
+          { chapter: chapterCount, intensity: 100, label: '最终高潮' },
+        ]
+
+        setArchitecture({
+          coreSeed: aiCoreSeed || coreSeed,
+          characterDynamics,
+          worldviewFramework,
+          plotArchitecture,
+          rhythmPoints,
+        })
+
+        if (aiCoreSeed) setCoreSeed(aiCoreSeed)
         setProgress(100)
-
-        // Parse the collected JSON text
-        try {
-          let cleaned = fullText.trim()
-          // Remove thinking tags
-          cleaned = cleaned.replace(/<think[\s\S]*?<\/think>/gi, '')
-          cleaned = cleaned.replace(/<thinking[\s\S]*?<\/thinking>/gi, '')
-          cleaned = cleaned.trim()
-          // Remove markdown code blocks
-          if (cleaned.startsWith('```json')) cleaned = cleaned.slice(7)
-          else if (cleaned.startsWith('```')) cleaned = cleaned.slice(3)
-          if (cleaned.endsWith('```')) cleaned = cleaned.slice(0, -3)
-          cleaned = cleaned.trim()
-
-          // Extract JSON
-          const jsonStart = cleaned.indexOf('{')
-          if (jsonStart >= 0) {
-            cleaned = cleaned.slice(jsonStart)
-          }
-
-          const architecture = JSON.parse(cleaned)
-
-          // Transform to frontend-expected format
-          const characterDynamics = architecture.characters
-            ? architecture.characters
-                .map((c: any) => `${c.name}（${c.role}）：${c.personality} | 动机：${c.motivation} | 弧线：${c.arc}`)
-                .join('\n')
-            : ''
-
-          const worldviewFramework = architecture.worldSettings
-            ? architecture.worldSettings
-                .map((ws: any) => `${ws.name}（${ws.category}）：${ws.description}`)
-                .join('\n')
-            : ''
-
-          const plotArchitecture = architecture.plotStructure
-            ? `开局设定（前${Math.floor(chapterCount * 0.1)}章）：${architecture.plotStructure.setup}\n` +
-              `上升行动（第${Math.floor(chapterCount * 0.1) + 1}-${Math.floor(chapterCount * 0.5)}章）：${architecture.plotStructure.risingAction}\n` +
-              `中点转折（约第${Math.floor(chapterCount * 0.5)}章）：${architecture.plotStructure.midpoint}\n` +
-              `下降行动（第${Math.floor(chapterCount * 0.5) + 1}-${Math.floor(chapterCount * 0.8)}章）：${architecture.plotStructure.fallingAction}\n` +
-              `高潮（第${Math.floor(chapterCount * 0.8) + 1}-${Math.floor(chapterCount * 0.9)}章）：${architecture.plotStructure.climax}\n` +
-              `结局（第${Math.floor(chapterCount * 0.9) + 1}-${chapterCount}章）：${architecture.plotStructure.resolution}`
-            : ''
-
-          const rhythmPoints = [
-            { chapter: 1, intensity: 60, label: '开篇引入' },
-            { chapter: Math.floor(chapterCount * 0.1), intensity: 70, label: '初遇挑战' },
-            { chapter: Math.floor(chapterCount * 0.25), intensity: 75, label: '冲突升级' },
-            { chapter: Math.floor(chapterCount * 0.5), intensity: 90, label: '中点转折' },
-            { chapter: Math.floor(chapterCount * 0.65), intensity: 70, label: '低谷蓄力' },
-            { chapter: Math.floor(chapterCount * 0.8), intensity: 85, label: '二次冲突' },
-            { chapter: Math.floor(chapterCount * 0.9), intensity: 95, label: '高潮预演' },
-            { chapter: chapterCount, intensity: 100, label: '最终高潮' },
-          ]
-
-          setArchitecture({
-            coreSeed: architecture.coreSeed || coreSeed,
-            characterDynamics,
-            worldviewFramework,
-            plotArchitecture,
-            rhythmPoints,
-          })
-          toast.success('架构生成完成')
-        } catch (parseError) {
-          console.error('Failed to parse architecture:', parseError)
-          toast.error('架构生成格式异常，请重试')
-        }
-      } else {
-        // Non-streaming JSON response (backward compatibility)
-        clearInterval(progressInterval)
-        setProgress(100)
-        const data = await res.json()
-        setArchitecture(data)
         toast.success('架构生成完成')
+      } else {
+        toast.error('架构生成格式异常，请重试')
       }
     } catch {
       toast.error('架构生成失败，请检查网络连接后重试')

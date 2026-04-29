@@ -115,22 +115,22 @@ export function WritingPanel({ projectId, chapterCount }: WritingPanelProps) {
       })
 
       if (res.ok) {
-        // Try streaming
-        const reader = res.body?.getReader()
-        if (reader) {
-          const decoder = new TextDecoder()
-          let fullText = ''
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-            const chunk = decoder.decode(value, { stream: true })
-            fullText += chunk
-            setStreamingText(fullText)
-          }
-          setTextContent(fullText)
+        // API now returns JSON with the generated content
+        const data = await res.json()
+        if (data.success && data.data) {
+          const { content, wordCount, status } = data.data
+          setTextContent(content)
           setStreamingText('')
-          updateChapterState(selectedChapter, fullText, 'generated')
+          updateChapterState(selectedChapter, content, status || 'generated')
           toast.success('章节生成完成')
+        } else if (data.content) {
+          // Alternative format
+          setTextContent(data.content)
+          setStreamingText('')
+          updateChapterState(selectedChapter, data.content, 'generated')
+          toast.success('章节生成完成')
+        } else {
+          toast.error('章节生成结果格式异常')
         }
       } else {
         const errorData = await res.json().catch(() => null)

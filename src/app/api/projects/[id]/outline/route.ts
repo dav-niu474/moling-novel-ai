@@ -1,11 +1,12 @@
 import { db, ensureDbInitialized } from '@/lib/db'
-import { aiChatStream, createStreamingResponse, parseAIJSON } from '@/lib/ai'
+import { aiChatStreamCollect, parseAIJSON } from '@/lib/ai'
 import { outlinePrompt } from '@/lib/prompts'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const maxDuration = 60;
 
-// POST /api/projects/[id]/outline - Generate chapter outlines using AI (streaming)
+// POST /api/projects/[id]/outline - Generate chapter outlines using AI
+// Uses aiChatStreamCollect to collect full response before saving
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -25,11 +26,11 @@ export async function POST(
     });
 
     if (!project) {
-      return NextResponse.json({ success: false, error: '项目不存在' }, { status: 404 });
+      return NextResponse.json({ error: '项目不存在' }, { status: 404 });
     }
 
     if (!project.coreSeed) {
-      return NextResponse.json({ success: false, error: '请先生成小说架构' }, { status: 400 });
+      return NextResponse.json({ error: '请先生成小说架构' }, { status: 400 });
     }
 
     await db.project.update({ where: { id }, data: { status: 'outlining' } });
@@ -76,74 +77,53 @@ export async function POST(
       plotStructure: plotStructureText,
     });
 
-    const stream = await aiChatStream([
+    const fullContent = await aiChatStreamCollect([
       { role: 'system', content: prompts.system },
       { role: 'user', content: prompts.user },
     ], { maxTokens: outlineMaxTokens });
 
-    const readableStream = createStreamingResponse(stream);
-    const savedId = id;
+    let outlines;
+    try {
+      outlines = parseAIJSON<Array<{
+        chapterNumber: number; title: string; summary: string;
+        keyPoints: string[] | string; foreshadowing: string[] | string;
+        emotionBeat: string; conflicts: Array<{ type: string; description: string }> | string;
+      }>>(fullContent);
+    } catch {
+      await db.project.update({ where: { id }, data: { status: 'architecting' } });
+      return NextResponse.json({ error: '大纲格式解析失败，请重试' }, { status: 500 });
+    }
 
-    let fullContent = '';
-    const transformStream = new TransformStream({
-      transform(chunk, controller) {
-        const text = new TextDecoder().decode(chunk);
-        fullContent += text;
-        controller.enqueue(chunk);
-      },
-      async flush() {
-        try {
-          let outlines;
-          try {
-            outlines = parseAIJSON<Array<{
-              chapterNumber: number; title: string; summary: string;
-              keyPoints: string[] | string; foreshadowing: string[] | string;
-              emotionBeat: string; conflicts: Array<{ type: string; description: string }> | string;
-            }>>(fullContent);
-          } catch {
-            await db.project.update({ where: { id: savedId }, data: { status: 'architecting' } });
-            return;
-          }
+    if (!Array.isArray(outlines) || outlines.length === 0) {
+      await db.project.update({ where: { id }, data: { status: 'architecting' } });
+      return NextResponse.json({ error: '生成的大纲为空，请重试' }, { status: 500 });
+    }
 
-          if (!Array.isArray(outlines) || outlines.length === 0) {
-            await db.project.update({ where: { id: savedId }, data: { status: 'architecting' } });
-            return;
-          }
-
-          await db.$transaction(async (tx) => {
-            await tx.chapterOutline.deleteMany({ where: { projectId: savedId } });
-            for (const outline of outlines) {
-              await tx.chapterOutline.create({
-                data: {
-                  projectId: savedId,
-                  chapterNumber: outline.chapterNumber,
-                  title: outline.title || `第${outline.chapterNumber}章`,
-                  summary: outline.summary || '',
-                  keyPoints: typeof outline.keyPoints === 'string' ? outline.keyPoints : JSON.stringify(outline.keyPoints || []),
-                  foreshadowing: typeof outline.foreshadowing === 'string' ? outline.foreshadowing : JSON.stringify(outline.foreshadowing || []),
-                  emotionBeat: outline.emotionBeat || '',
-                  conflicts: typeof outline.conflicts === 'string' ? outline.conflicts : JSON.stringify(outline.conflicts || []),
-                },
-              });
-            }
-            await tx.project.update({ where: { id: savedId }, data: { status: 'outlining' } });
-          });
-        } catch (err) {
-          console.error('Failed to save outlines:', err);
-          try { await db.project.update({ where: { id: savedId }, data: { status: 'architecting' } }) } catch {}
-        }
-      },
+    await db.$transaction(async (tx) => {
+      await tx.chapterOutline.deleteMany({ where: { projectId: id } });
+      for (const outline of outlines) {
+        await tx.chapterOutline.create({
+          data: {
+            projectId: id,
+            chapterNumber: outline.chapterNumber,
+            title: outline.title || `第${outline.chapterNumber}章`,
+            summary: outline.summary || '',
+            keyPoints: typeof outline.keyPoints === 'string' ? outline.keyPoints : JSON.stringify(outline.keyPoints || []),
+            foreshadowing: typeof outline.foreshadowing === 'string' ? outline.foreshadowing : JSON.stringify(outline.foreshadowing || []),
+            emotionBeat: outline.emotionBeat || '',
+            conflicts: typeof outline.conflicts === 'string' ? outline.conflicts : JSON.stringify(outline.conflicts || []),
+          },
+        });
+      }
+      await tx.project.update({ where: { id }, data: { status: 'outlining' } });
     });
 
-    const finalStream = readableStream.pipeThrough(transformStream);
-
-    return new Response(finalStream, {
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Transfer-Encoding': 'chunked',
-        'Cache-Control': 'no-cache',
-      },
+    const savedOutlines = await db.chapterOutline.findMany({
+      where: { projectId: id },
+      orderBy: { chapterNumber: 'asc' },
     });
+
+    return NextResponse.json(savedOutlines);
   } catch (error) {
     console.error('Outline generation failed:', error);
     if (projectId) {

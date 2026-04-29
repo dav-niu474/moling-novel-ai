@@ -1,10 +1,13 @@
 import { db, ensureDbInitialized } from '@/lib/db'
-import { aiChatStream, createStreamingResponse } from '@/lib/ai'
+import { aiChatStreamCollect } from '@/lib/ai'
 import { chapterWritingPrompt } from '@/lib/prompts'
 import { NextResponse } from 'next/server'
 
 export const maxDuration = 60;
 
+// POST /api/chapter-contents/generate - Generate chapter content using AI
+// Uses aiChatStreamCollect to collect full response before saving,
+// which is more reliable than TransformStream flush on Vercel Serverless
 export async function POST(request: Request) {
   try {
     await ensureDbInitialized()
@@ -62,7 +65,7 @@ export async function POST(request: Request) {
       .map((ws) => `${ws.name}：${ws.description}`)
       .join('\n')
 
-    // Generate chapter content using streaming
+    // Generate chapter content (streaming internally, collects before returning)
     const prompts = chapterWritingPrompt({
       title: project.title,
       genre: project.genre,
@@ -79,63 +82,44 @@ export async function POST(request: Request) {
       wordsPerChapter: project.wordsPerChapter,
     })
 
-    const stream = await aiChatStream([
+    const fullContent = await aiChatStreamCollect([
       { role: 'system', content: prompts.system },
       { role: 'user', content: prompts.user },
     ])
 
-    // Create streaming response
-    const readableStream = createStreamingResponse(stream)
-
-    // Use a TransformStream to capture content while streaming to save to DB after completion
-    let fullContent = ''
-    const transformStream = new TransformStream({
-      transform(chunk, controller) {
-        const text = new TextDecoder().decode(chunk)
-        fullContent += text
-        controller.enqueue(chunk)
+    // Save to database
+    const wordCount = fullContent.length
+    await db.chapterContent.upsert({
+      where: {
+        projectId_chapterNumber: { projectId, chapterNumber },
       },
-      async flush() {
-        // Save to database after streaming completes
-        try {
-          const wordCount = fullContent.length
-          await db.chapterContent.upsert({
-            where: {
-              projectId_chapterNumber: { projectId, chapterNumber },
-            },
-            create: {
-              projectId,
-              chapterNumber,
-              content: fullContent,
-              wordCount,
-              status: 'generated',
-            },
-            update: {
-              content: fullContent,
-              wordCount,
-              status: 'generated',
-            },
-          })
-
-          // Update project status
-          await db.project.update({
-            where: { id: projectId },
-            data: { status: 'writing' },
-          })
-        } catch (err) {
-          console.error('Failed to save chapter content:', err)
-        }
+      create: {
+        projectId,
+        chapterNumber,
+        content: fullContent,
+        wordCount,
+        status: 'generated',
+      },
+      update: {
+        content: fullContent,
+        wordCount,
+        status: 'generated',
       },
     })
 
-    const finalStream = readableStream.pipeThrough(transformStream)
+    // Update project status
+    await db.project.update({
+      where: { id: projectId },
+      data: { status: 'writing' },
+    })
 
-    return new Response(finalStream, {
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Transfer-Encoding': 'chunked',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
+    return NextResponse.json({
+      success: true,
+      data: {
+        chapterNumber,
+        content: fullContent,
+        wordCount,
+        status: 'generated',
       },
     })
   } catch (error) {
