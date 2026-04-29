@@ -50,9 +50,9 @@ export async function POST(request: Request) {
       .join('\n')
 
     // Cap chapter count to avoid Vercel timeout
-    // AI generation of 10 chapters takes ~30-45s, which fits within 60s maxDuration
-    // Users can generate more outlines in batches by calling this endpoint again
-    const effectiveChapterCount = Math.min(project.chapterCount, 10)
+    // AI generation of 5 chapters takes ~20-30s on NVIDIA Llama 3.3 70B
+    // which fits within 60s maxDuration on Vercel
+    const effectiveChapterCount = Math.min(project.chapterCount, 5)
 
     // Generate outlines using AI with streaming internally to avoid timeout
     const prompts = outlinePrompt({
