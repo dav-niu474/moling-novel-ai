@@ -49,7 +49,7 @@ export async function POST(
       .map((ws) => `${ws.name}（${ws.category}）：${ws.description}`)
       .join('\n');
 
-    const effectiveChapterCount = Math.min(project.chapterCount, 30);
+    const effectiveChapterCount = Math.min(project.chapterCount, 10);
     const outlineMaxTokens = Math.min(Math.max(effectiveChapterCount * 500, 4096), 16384);
 
     const prompts = outlinePrompt({
