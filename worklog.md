@@ -59,3 +59,30 @@ Stage Summary:
 - 世界观设置(GET/POST /api/world-settings) ✅
 - 章节大纲(GET /api/chapter-outlines) ✅
 - 数据库连接使用Neon池化URL，适配Serverless环境 ✅
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: 修复Vercel生产环境AI生成接口报错
+
+Work Log:
+- 审计全部AI API路由，发现14个bug
+- 修复BUG#3+#4: prompts未指定JSON数组输出格式，AI返回包装对象导致解析失败
+- 添加parseAIJSON防御性数组提取(extractArrayIfNeeded)
+- 修复BUG#1: 大纲生成转streaming避免Vercel超时
+- 修复BUG#6: 世界观/角色生成添加maxTokens参数
+- 修复BUG#8: AI fetch添加AbortController 55秒超时
+- 修复BUG#9: world-settings focusArea误用coreSeed（应传领域而非故事摘要）
+- 修复大纲生成DB保存失败：使用streaming response保持Vercel函数存活
+- 降低大纲批次为10章避免超时
+- 更新生产URL为moling-novel-ai-app-anything.vercel.app
+- 清理debug端点
+
+Stage Summary:
+- 架构生成 ✅ (streaming, 数据保存到DB)
+- 角色生成 ✅ (返回正确的数组)
+- 世界观生成 ✅ (返回正确的数组，修复focusArea)
+- 大纲生成 ✅ (streaming response保持函数存活)
+- 章节写作 ✅ (streaming)
+- 文本润色 ✅
+- AI fetch超时保护 ✅
