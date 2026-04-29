@@ -15,9 +15,15 @@ export async function GET() {
       },
     })
     return NextResponse.json(projects)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to fetch projects:', error)
-    return NextResponse.json({ error: 'Failed to fetch projects' }, { status: 500 })
+    // Return detailed error for debugging (remove in production)
+    return NextResponse.json({
+      error: 'Failed to fetch projects',
+      details: error?.message || String(error),
+      code: error?.code,
+      meta: error?.meta,
+    }, { status: 500 })
   }
 }
 
@@ -42,8 +48,14 @@ export async function POST(request: Request) {
     })
 
     return NextResponse.json(project)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to create project:', error)
-    return NextResponse.json({ error: 'Failed to create project' }, { status: 500 })
+    // Return detailed error for debugging (remove in production)
+    return NextResponse.json({
+      error: 'Failed to create project',
+      details: error?.message || String(error),
+      code: error?.code,
+      meta: error?.meta,
+    }, { status: 500 })
   }
 }
