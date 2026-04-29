@@ -8,7 +8,7 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   try {
     await ensureDbInitialized()
-    const { projectId } = await request.json()
+    const { projectId, focusArea } = await request.json()
     if (!projectId) {
       return NextResponse.json({ error: 'projectId is required' }, { status: 400 })
     }
@@ -31,16 +31,17 @@ export async function POST(request: Request) {
       .join('\n')
 
     // Generate world settings using AI
+    // focusArea should be a domain like "power-system", not the coreSeed story summary
     const prompts = worldviewPrompt({
       genre: project.genre,
       existingSettings,
-      focusArea: project.coreSeed || undefined,
+      focusArea: focusArea || undefined,
     })
 
     const resultText = await aiChat([
       { role: 'system', content: prompts.system },
       { role: 'user', content: prompts.user },
-    ])
+    ], { maxTokens: 8192 })
 
     // Parse the AI response - expect an array of world setting objects
     let worldSettings

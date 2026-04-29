@@ -1,18 +1,18 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { db, ensureDbInitialized } from '@/lib/db';
-import { aiChat, parseAIJSON } from '@/lib/ai';
-import { outlinePrompt } from '@/lib/prompts';
+import { db, ensureDbInitialized } from '@/lib/db'
+import { aiChatStream, createStreamingResponse, parseAIJSON } from '@/lib/ai'
+import { outlinePrompt } from '@/lib/prompts'
+import { NextRequest, NextResponse } from 'next/server'
 
 export const maxDuration = 60;
 
-// POST /api/projects/[id]/outline - Generate chapter outlines using AI
+// POST /api/projects/[id]/outline - Generate chapter outlines using AI (streaming)
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   let projectId: string | undefined;
   try {
-    await ensureDbInitialized();
+    await ensureDbInitialized()
     const { id } = await params;
     projectId = id;
 
@@ -26,17 +26,11 @@ export async function POST(
     });
 
     if (!project) {
-      return NextResponse.json(
-        { success: false, error: '项目不存在' },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, error: '项目不存在' }, { status: 404 });
     }
 
     if (!project.coreSeed) {
-      return NextResponse.json(
-        { success: false, error: '请先生成小说架构' },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: '请先生成小说架构' }, { status: 400 });
     }
 
     // Update status
@@ -45,7 +39,7 @@ export async function POST(
       data: { status: 'outlining' },
     });
 
-    // Prepare context for outline generation
+    // Prepare context
     const charactersSummary = project.characters
       .map((c) => `${c.name}（${c.role}）：${c.personality} | 动机：${c.motivation}`)
       .join('\n');
@@ -54,7 +48,6 @@ export async function POST(
       .map((ws) => `${ws.name}（${ws.category}）：${ws.description}`)
       .join('\n');
 
-    // Cap chapter count and generate outlines using AI
     const effectiveChapterCount = Math.min(project.chapterCount, 30);
     const outlineMaxTokens = Math.min(Math.max(effectiveChapterCount * 500, 4096), 16384);
 
@@ -64,104 +57,87 @@ export async function POST(
       chapterCount: effectiveChapterCount,
       wordsPerChapter: project.wordsPerChapter,
       coreSeed: project.coreSeed,
-      characters: charactersSummary,
-      worldSettings: worldSettingsSummary,
+      characters: charactersSummary || '暂无角色信息',
+      worldSettings: worldSettingsSummary || '暂无世界设定',
       plotStructure: `架构核心种子：${project.coreSeed}`,
     });
 
-    const resultText = await aiChat([
+    const stream = await aiChatStream([
       { role: 'system', content: prompts.system },
       { role: 'user', content: prompts.user },
     ], { maxTokens: outlineMaxTokens });
 
-    // Parse the AI response
-    let outlines;
-    try {
-      outlines = parseAIJSON<
-        Array<{
-          chapterNumber: number;
-          title: string;
-          summary: string;
-          keyPoints: string[] | string;
-          foreshadowing: string[] | string;
-          emotionBeat: string;
-          conflicts: Array<{ type: string; description: string }> | string;
-        }>
-      >(resultText);
-    } catch (parseError) {
-      console.error('Failed to parse outline JSON:', parseError);
-      console.error('Raw AI response:', resultText);
-      await db.project.update({ where: { id }, data: { status: 'architecting' } });
-      return NextResponse.json(
-        { success: false, error: 'AI生成的大纲格式无法解析，请重试' },
-        { status: 500 }
-      );
-    }
+    const readableStream = createStreamingResponse(stream);
 
-    if (!Array.isArray(outlines) || outlines.length === 0) {
-      await db.project.update({ where: { id }, data: { status: 'architecting' } });
-      return NextResponse.json(
-        { success: false, error: 'AI未生成有效大纲，请重试' },
-        { status: 500 }
-      );
-    }
+    let fullContent = '';
+    const transformStream = new TransformStream({
+      transform(chunk, controller) {
+        const text = new TextDecoder().decode(chunk);
+        fullContent += text;
+        controller.enqueue(chunk);
+      },
+      async flush() {
+        try {
+          let outlines;
+          try {
+            outlines = parseAIJSON<Array<{
+              chapterNumber: number;
+              title: string;
+              summary: string;
+              keyPoints: string[] | string;
+              foreshadowing: string[] | string;
+              emotionBeat: string;
+              conflicts: Array<{ type: string; description: string }> | string;
+            }>>(fullContent);
+          } catch {
+            await db.project.update({ where: { id }, data: { status: 'architecting' } });
+            return;
+          }
 
-    // Save outlines to database
-    await db.$transaction(async (tx) => {
-      // Delete existing outlines
-      await tx.chapterOutline.deleteMany({ where: { projectId: id } });
+          if (!Array.isArray(outlines) || outlines.length === 0) {
+            await db.project.update({ where: { id }, data: { status: 'architecting' } });
+            return;
+          }
 
-      // Create new outlines
-      for (const outline of outlines) {
-        await tx.chapterOutline.create({
-          data: {
-            projectId: id,
-            chapterNumber: outline.chapterNumber,
-            title: outline.title || `第${outline.chapterNumber}章`,
-            summary: outline.summary || '',
-            keyPoints: typeof outline.keyPoints === 'string'
-              ? outline.keyPoints
-              : JSON.stringify(outline.keyPoints || []),
-            foreshadowing: typeof outline.foreshadowing === 'string'
-              ? outline.foreshadowing
-              : JSON.stringify(outline.foreshadowing || []),
-            emotionBeat: outline.emotionBeat || '',
-            conflicts: typeof outline.conflicts === 'string'
-              ? outline.conflicts
-              : JSON.stringify(outline.conflicts || []),
-          },
-        });
-      }
-
-      // Update project status
-      await tx.project.update({
-        where: { id },
-        data: { status: 'outlining' },
-      });
+          await db.$transaction(async (tx) => {
+            await tx.chapterOutline.deleteMany({ where: { projectId: id } });
+            for (const outline of outlines) {
+              await tx.chapterOutline.create({
+                data: {
+                  projectId: id,
+                  chapterNumber: outline.chapterNumber,
+                  title: outline.title || `第${outline.chapterNumber}章`,
+                  summary: outline.summary || '',
+                  keyPoints: typeof outline.keyPoints === 'string' ? outline.keyPoints : JSON.stringify(outline.keyPoints || []),
+                  foreshadowing: typeof outline.foreshadowing === 'string' ? outline.foreshadowing : JSON.stringify(outline.foreshadowing || []),
+                  emotionBeat: outline.emotionBeat || '',
+                  conflicts: typeof outline.conflicts === 'string' ? outline.conflicts : JSON.stringify(outline.conflicts || []),
+                },
+              });
+            }
+            await tx.project.update({ where: { id }, data: { status: 'outlining' } });
+          });
+        } catch (err) {
+          console.error('Failed to save outlines:', err);
+          try { await db.project.update({ where: { id }, data: { status: 'architecting' } }); } catch {}
+        }
+      },
     });
 
-    // Fetch saved outlines
-    const savedOutlines = await db.chapterOutline.findMany({
-      where: { projectId: id },
-      orderBy: { chapterNumber: 'asc' },
-    });
+    const finalStream = readableStream.pipeThrough(transformStream);
 
-    return NextResponse.json(savedOutlines);
+    return new Response(finalStream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Transfer-Encoding': 'chunked',
+        'Cache-Control': 'no-cache',
+      },
+    });
   } catch (error) {
     console.error('Outline generation failed:', error);
     if (projectId) {
-      try {
-        await db.project.update({
-          where: { id: projectId },
-          data: { status: 'architecting' },
-        });
-      } catch {
-        // Ignore
-      }
+      try { await db.project.update({ where: { id: projectId }, data: { status: 'architecting' } }); } catch {}
     }
-    return NextResponse.json(
-      { error: '大纲生成失败，请重试' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '大纲生成失败，请重试' }, { status: 500 });
   }
 }

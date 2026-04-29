@@ -52,19 +52,12 @@ export function architecturePrompt(params: {
 - 要有至少一条暗线和伏笔预留
 - 类型为"${params.genre}"，必须符合该类型的读者期待
 
-请以JSON格式输出，结构如下：
+请严格按以下JSON格式输出（不要输出其他任何文字）：
 {
   "coreSeed": "核心种子文本",
-  "characters": [...],
-  "worldSettings": [...],
-  "plotStructure": {
-    "setup": "...",
-    "risingAction": "...",
-    "midpoint": "...",
-    "fallingAction": "...",
-    "climax": "...",
-    "resolution": "..."
-  }
+  "characters": [{"name":"","role":"","personality":"","motivation":"","arc":"","relationships":{},"appearance":"","background":""}],
+  "worldSettings": [{"category":"","name":"","description":"","rules":""}],
+  "plotStructure": {"setup":"","risingAction":"","midpoint":"","fallingAction":"","climax":"","resolution":""}
 }`;
 
   const user = `请为以下小说生成完整架构：
@@ -99,13 +92,14 @@ export function characterDesignPrompt(params: {
 5. 配角要有自己的故事线，不能只是工具人
 6. 角色之间的关系要复杂且有变化空间
 
-请以JSON格式输出角色设计。`;
+请严格按以下JSON数组格式输出（直接输出数组，不要包装在对象中）：
+[{"name":"角色名","role":"protagonist/antagonist/supporting/minor","personality":"性格特点","motivation":"核心动机","arc":"角色弧线","relationships":{},"appearance":"外貌描述","background":"背景故事"}]`;
 
   const user = `类型：${params.genre}
 已有角色：${params.existingCharacters || '暂无'}
-${params.characterConcept ? `角色概念：${params.characterConcept}` : '请设计新的核心角色'}
+${params.characterConcept ? `角色概念：${params.characterConcept}` : '请设计2-3个新的核心角色'}
 
-请设计角色，包含：name, role, personality, motivation, arc, relationships, appearance, background`;
+请设计角色，直接输出JSON数组。`;
 
   return { system, user };
 }
@@ -128,19 +122,22 @@ export function worldviewPrompt(params: {
 5. 留下未探索的区域供故事扩展
 6. 所有设定最终都要为故事冲突服务
 
-请以JSON格式输出世界设定，每个设定包含：category, name, description, rules`;
+请严格按以下JSON数组格式输出（直接输出数组，不要包装在对象中）：
+[{"category":"geography/culture/power-system/history/faction/technology/economy","name":"设定名称","description":"详细描述","rules":"核心规则/法则"}]`;
 
   const user = `类型：${params.genre}
 已有设定：${params.existingSettings || '暂无'}
-${params.focusArea ? `需要重点构建的领域：${params.focusArea}` : '请构建核心世界设定'}
+${params.focusArea ? `需要重点构建的领域：${params.focusArea}` : '请构建3-6个核心世界设定'}
 
-请生成世界设定方案。`;
+请生成世界设定方案，直接输出JSON数组。`;
 
   return { system, user };
 }
 
 /**
  * Outline Generation - Generate chapter outlines with rhythm curve
+ * IMPORTANT: For Vercel deployment, this should be used with streaming
+ * to avoid serverless function timeout.
  */
 export function outlinePrompt(params: {
   title: string;
@@ -174,14 +171,8 @@ export function outlinePrompt(params: {
    - 主角不能持续受挫超过2章
    - 要有日常调剂，不能一直紧张
 
-请为每一章生成大纲，JSON数组格式，每项包含：
-- chapterNumber: 章节序号
-- title: 章节标题（吸引人的，有悬念的）
-- summary: 章节摘要（100-150字）
-- keyPoints: 关键情节点（JSON数组，3-5个）
-- foreshadowing: 伏笔设置（JSON数组，可为空）
-- emotionBeat: 情绪节拍（如：紧张→爆发→释然，或：温馨→震惊→期待）
-- conflicts: 冲突列表（JSON数组，每个冲突包含type和description）
+请严格按以下JSON数组格式输出（直接输出数组，不要包装在对象中）：
+[{"chapterNumber":1,"title":"章节标题","summary":"章节摘要100-150字","keyPoints":["情节点1","情节点2"],"foreshadowing":["伏笔1"],"emotionBeat":"紧张→爆发→释然","conflicts":[{"type":"人物冲突","description":"冲突描述"}]}]
 
 请确保大纲前后衔接自然，伏笔有呼应，节奏有起伏。`;
 
@@ -203,7 +194,7 @@ ${params.worldSettings}
 **情节结构**：
 ${params.plotStructure}
 
-请生成所有${params.chapterCount}章的大纲。`;
+请生成所有${params.chapterCount}章的大纲，直接输出JSON数组。`;
 
   return { system, user };
 }
@@ -370,14 +361,10 @@ export function consistencyCheckPrompt(params: {
    - 是否有前后文风不统一
    - 是否有过于突兀的表达
 
-请以JSON数组格式输出发现的问题，每个问题包含：
-- type: 问题类型（character_logic/plot_contradiction/setting_violation/style_issue）
-- severity: 严重程度（high/medium/low）
-- description: 问题描述
-- location: 问题在文中的大致位置（引用原文片段）
-- suggestion: 修改建议
+请严格按以下JSON数组格式输出（直接输出数组，不要包装在对象中）：
+[{"type":"character_logic/plot_contradiction/setting_violation/style_issue","severity":"high/medium/low","description":"问题描述","location":"原文片段","suggestion":"修改建议"}]
 
-如果没有发现问题，返回空数组。`;
+如果没有发现问题，返回空数组 []。`;
 
   const user = `请检查第${params.chapterNumber}章的一致性：
 

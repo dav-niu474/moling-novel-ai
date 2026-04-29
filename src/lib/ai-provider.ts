@@ -262,14 +262,23 @@ async function openAIChat(
     stream: false,
   };
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 55000); // 55s timeout for maxDuration=60
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => 'Unknown error');
@@ -302,14 +311,23 @@ async function openAIChatStream(
     stream: true,
   };
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 55000);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => 'Unknown error');
@@ -480,6 +498,34 @@ export function createStreamingResponse(stream: AsyncIterable<any>): ReadableStr
 }
 
 /**
+ * Defensive array extraction: if AI wraps array in an object,
+ * try to extract the array from common wrapper properties.
+ * E.g., {"settings": [...]} → [...], {"characters": [...]} → [...]
+ */
+function extractArrayIfNeeded<T>(parsed: any): T {
+  if (Array.isArray(parsed)) {
+    return parsed as T;
+  }
+  if (typeof parsed === 'object' && parsed !== null) {
+    // Try common wrapper property names for arrays
+    const arrayKeys = ['characters', 'settings', 'worldSettings', 'outlines', 'chapters', 
+      'items', 'results', 'data', 'list', 'entries', 'elements', 'content'];
+    for (const key of arrayKeys) {
+      if (Array.isArray(parsed[key])) {
+        return parsed[key] as T;
+      }
+    }
+    // If no known key found, try the first array-valued property
+    for (const value of Object.values(parsed)) {
+      if (Array.isArray(value)) {
+        return value as T;
+      }
+    }
+  }
+  return parsed as T;
+}
+
+/**
  * Parse JSON from AI response, handling various edge cases:
  * - Markdown code blocks (```json...```)
  * - Thinking/reasoning tags (<think...</think >)
@@ -507,7 +553,8 @@ export function parseAIJSON<T>(text: string): T {
 
   // Step 3: Try direct parse first
   try {
-    return JSON.parse(cleaned) as T;
+    const parsed = JSON.parse(cleaned);
+    return extractArrayIfNeeded<T>(parsed);
   } catch {
     // Continue to more aggressive extraction
   }

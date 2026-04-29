@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     const resultText = await aiChat([
       { role: 'system', content: prompts.system },
       { role: 'user', content: prompts.user },
-    ])
+    ], { maxTokens: 8192 })
 
     // Parse the AI response - expect an array of character objects
     let characters
