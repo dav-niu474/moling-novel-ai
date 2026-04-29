@@ -86,3 +86,30 @@ Stage Summary:
 - 章节写作 ✅ (streaming)
 - 文本润色 ✅
 - AI fetch超时保护 ✅
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: 修复核心数据流断裂 — 架构生成后数据未保存、后续生成基于不完整上下文
+
+Work Log:
+- 全面审查代码架构：发现plotStructure从未持久化到数据库
+- 诊断核心数据流断裂：架构→大纲→章节 的上下文链路断裂
+- 数据库schema升级：Project表新增plotStructure字段(JSON)
+- 修复db.ts：添加migrateSchema()自动迁移新列到已有数据库
+- 修复架构生成API：保存plotStructure JSON到数据库（之前只保存coreSeed）
+- 修复大纲生成API：解析plotStructure JSON并传递完整情节架构（之前只传coreSeed重复文本）
+- 修复OutlinePanel：正确处理streaming text/plain响应（之前用res.json()解析流数据必定失败）
+- 修复ArchitecturePanel：组件挂载时从DB加载已保存的架构数据（之前刷新/切换tab后数据全丢）
+- 修复WritingPanel一致性检查：使用专用/api/projects/[id]/check端点（之前用refine端点hack）
+- 修复润色结果自动保存：润色后自动PUT保存到DB（之前需手动保存否则丢失）
+- Project PATCH API：允许更新plotStructure字段
+- ProjectWorkspace：传递plotStructure到子组件
+
+Stage Summary:
+- 核心数据流修复：架构生成 → plotStructure持久化 → 大纲生成使用完整上下文 → 章节写作
+- OutlinePanel streaming解析修复
+- ArchitecturePanel 数据持久化显示
+- 一致性检查使用正确端点
+- 润色自动保存
+- 代码已推送到GitHub，Vercel自动部署中
