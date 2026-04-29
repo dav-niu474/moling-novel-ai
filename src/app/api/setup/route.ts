@@ -4,7 +4,7 @@ import { db } from '@/lib/db'
 export const maxDuration = 60
 
 // POST /api/setup - Initialize database schema
-// This endpoint runs Prisma migrations to set up the database
+// This endpoint creates all required tables for the novel AI platform
 export async function POST() {
   try {
     console.log('[setup] Starting database setup...')
@@ -14,12 +14,32 @@ export async function POST() {
     await db.$queryRaw`SELECT 1`
     console.log('[setup] Database connection successful')
 
-    // Try to create tables using raw SQL as a fallback
-    // This ensures the schema exists even if prisma db push failed during build
-    console.log('[setup] Checking/creating database tables...')
+    // Drop existing tables that might conflict (from old schema)
+    // Drop in reverse dependency order
+    const dropTables = [
+      'DROP TABLE IF EXISTS "ChapterContent" CASCADE',
+      'DROP TABLE IF EXISTS "ChapterOutline" CASCADE',
+      'DROP TABLE IF EXISTS "PromptTemplate" CASCADE',
+      'DROP TABLE IF EXISTS "WorldSetting" CASCADE',
+      'DROP TABLE IF EXISTS "Character" CASCADE',
+      'DROP TABLE IF EXISTS "AISettings" CASCADE',
+      'DROP TABLE IF EXISTS "Project" CASCADE',
+    ]
+
+    for (const sql of dropTables) {
+      try {
+        await db.$executeRawUnsafe(sql)
+      } catch {
+        // Ignore errors - table might not exist
+      }
+    }
+    console.log('[setup] Cleaned up old tables')
+
+    // Create tables in dependency order
+    console.log('[setup] Creating database tables...')
 
     await db.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS "Project" (
+      CREATE TABLE "Project" (
         "id" TEXT NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
         "title" TEXT NOT NULL,
         "genre" TEXT NOT NULL,
@@ -34,7 +54,7 @@ export async function POST() {
     `)
 
     await db.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS "Character" (
+      CREATE TABLE "Character" (
         "id" TEXT NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
         "projectId" TEXT NOT NULL,
         "name" TEXT NOT NULL,
@@ -53,7 +73,7 @@ export async function POST() {
     `)
 
     await db.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS "WorldSetting" (
+      CREATE TABLE "WorldSetting" (
         "id" TEXT NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
         "projectId" TEXT NOT NULL,
         "category" TEXT NOT NULL DEFAULT 'general',
@@ -68,7 +88,7 @@ export async function POST() {
     `)
 
     await db.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS "ChapterOutline" (
+      CREATE TABLE "ChapterOutline" (
         "id" TEXT NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
         "projectId" TEXT NOT NULL,
         "chapterNumber" INTEGER NOT NULL,
@@ -86,7 +106,7 @@ export async function POST() {
     `)
 
     await db.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS "ChapterContent" (
+      CREATE TABLE "ChapterContent" (
         "id" TEXT NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
         "projectId" TEXT NOT NULL,
         "chapterNumber" INTEGER NOT NULL,
@@ -102,7 +122,7 @@ export async function POST() {
     `)
 
     await db.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS "PromptTemplate" (
+      CREATE TABLE "PromptTemplate" (
         "id" TEXT NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
         "projectId" TEXT NOT NULL,
         "name" TEXT NOT NULL,
@@ -117,7 +137,7 @@ export async function POST() {
     `)
 
     await db.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS "AISettings" (
+      CREATE TABLE "AISettings" (
         "id" TEXT NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
         "provider" TEXT NOT NULL DEFAULT 'nvidia',
         "apiKey" TEXT NOT NULL DEFAULT '',
@@ -143,27 +163,24 @@ export async function POST() {
       await db.$executeRawUnsafe(sql)
     }
 
-    // Seed default AI settings if not exist
-    const existingSettings = await db.aISettings.findFirst()
-    if (!existingSettings) {
-      await db.aISettings.create({
-        data: {
-          provider: 'nvidia',
-          apiKey: '',
-          baseUrl: 'https://integrate.api.nvidia.com/v1',
-          model: 'meta/llama-3.3-70b-instruct',
-          temperature: 0.7,
-          maxTokens: 8192,
-        },
-      })
-      console.log('[setup] Created default AI settings')
-    }
+    // Seed default AI settings
+    await db.aISettings.create({
+      data: {
+        provider: 'nvidia',
+        apiKey: '',
+        baseUrl: 'https://integrate.api.nvidia.com/v1',
+        model: 'meta/llama-3.3-70b-instruct',
+        temperature: 0.7,
+        maxTokens: 8192,
+      },
+    })
+    console.log('[setup] Created default AI settings')
 
     console.log('[setup] Database setup complete!')
 
     return NextResponse.json({
       success: true,
-      message: 'Database schema created/verified successfully',
+      message: 'Database schema created successfully',
     })
   } catch (error: any) {
     console.error('[setup] Database setup failed:', error)
@@ -179,7 +196,6 @@ export async function POST() {
 // GET /api/setup - Check database status
 export async function GET() {
   try {
-    // Check if tables exist by trying a simple query
     const tables = await db.$queryRawUnsafe(`
       SELECT table_name FROM information_schema.tables
       WHERE table_schema = 'public'
@@ -190,12 +206,29 @@ export async function GET() {
     const requiredTables = ['Project', 'Character', 'WorldSetting', 'ChapterOutline', 'ChapterContent', 'PromptTemplate', 'AISettings']
     const missingTables = requiredTables.filter(t => !tableNames.includes(t))
 
+    // Check Project table schema
+    let projectSchemaOk = false
+    if (tableNames.includes('Project')) {
+      try {
+        const columns = await db.$queryRawUnsafe(`
+          SELECT column_name FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'Project'
+          ORDER BY ordinal_position;
+        `) as Array<{ column_name: string }>
+        const columnNames = columns.map(c => c.column_name)
+        projectSchemaOk = columnNames.includes('title') && columnNames.includes('genre')
+      } catch {
+        // Ignore
+      }
+    }
+
     return NextResponse.json({
       connected: true,
       tables: tableNames,
       requiredTables,
       missingTables,
-      needsSetup: missingTables.length > 0,
+      projectSchemaOk,
+      needsSetup: missingTables.length > 0 || !projectSchemaOk,
     })
   } catch (error: any) {
     return NextResponse.json({
