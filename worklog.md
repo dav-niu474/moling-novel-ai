@@ -26,3 +26,36 @@ Stage Summary:
 - Vercel部署环境变量已更新为正确的PostgreSQL连接串
 - 线上API验证通过：projects/ai-settings/characters等接口均正常返回
 - GitHub仓库Homepage更新为正确的部署URL
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: 修复Vercel生产环境数据库适配问题，解决创建项目API报错
+
+Work Log:
+- 诊断了Vercel生产环境API返回500错误的根因
+- 发现问题1: DATABASE_URL指向Neon直连URL(非池化)，在Serverless环境会导致连接耗尽
+- 发现问题2: Neon数据库表不存在(之前的prisma db push未在构建时正确执行)
+- 发现问题3: 数据库中存在旧应用表(Project表schema不匹配)
+- 修复db.ts: 自动检测Neon环境变量，优先使用池化连接(moling_POSTGRES_PRISMA_URL)
+- 修复db.ts: 自动设置DIRECT_URL为直连连接(用于Prisma迁移和交互式事务)
+- 添加ensureDbInitialized(): 数据库表自动初始化，首次查询时自动创建缺失的表
+- 更新全部21个API路由：添加ensureDbInitialized()调用确保数据库就绪
+- 更新ai-provider.ts: getAISettings()中也调用ensureDbInitialized()
+- 创建Vercel构建脚本(scripts/vercel-build.sh): 构建时自动运行prisma db push
+- 创建/api/setup端点: 手动初始化数据库schema(已使用并验证成功)
+- 清理debug端点(安全考虑)
+- 全部代码提交推送并部署到Vercel
+
+Stage Summary:
+- 所有API接口已在Vercel生产环境验证通过
+- 项目创建(POST /api/projects) ✅
+- 项目列表(GET /api/projects) ✅
+- 项目详情(GET /api/projects/[id]) ✅
+- 项目更新(PATCH /api/projects/[id]) ✅
+- 项目删除(DELETE /api/projects/[id]) ✅
+- AI设置(GET/PUT /api/settings) ✅
+- 角色管理(GET/POST /api/characters) ✅
+- 世界观设置(GET/POST /api/world-settings) ✅
+- 章节大纲(GET /api/chapter-outlines) ✅
+- 数据库连接使用Neon池化URL，适配Serverless环境 ✅
